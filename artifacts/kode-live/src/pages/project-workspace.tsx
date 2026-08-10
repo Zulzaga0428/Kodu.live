@@ -16,7 +16,7 @@ import {
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
   DownloadIcon, FolderPlusIcon, FilePlusIcon, ExternalLinkIcon,
-  SparklesIcon, CornerDownLeftIcon, StopCircleIcon, ImageIcon, XCircleIcon, ChevronDownIcon as ChevronDown,
+  SparklesIcon, CornerDownLeftIcon, StopCircleIcon, ImageIcon, XCircleIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -1473,7 +1473,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
                     <span className="text-[9px] font-mono font-semibold">
                       {agentSettings.model.includes("haiku") ? "⚡ Fast" : agentSettings.model.includes("opus") ? "🔬 Deep" : "🧠 Smart"}
                     </span>
-                    <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                    <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-[160px] font-mono text-xs">
