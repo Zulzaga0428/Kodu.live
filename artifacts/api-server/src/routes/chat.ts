@@ -446,7 +446,8 @@ router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void
   try {
     // ── Agentic loop ────────────────────────────────────────────────────────
     for (let loop = 0; loop < 20; loop++) {
-      const response = await anthropic.messages.create({
+      // Use streaming so tokens arrive at the frontend in real-time
+      const stream = anthropic.messages.stream({
         model: model ?? "claude-sonnet-4-5",
         max_tokens: maxTokens ? Number(maxTokens) : 8192,
         system: SYSTEM_PROMPT,
@@ -454,13 +455,14 @@ router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void
         messages,
       });
 
-      // Stream text blocks
-      for (const block of response.content) {
-        if (block.type === "text" && block.text) {
-          fullText += block.text;
-          send({ type: "delta", text: block.text });
-        }
-      }
+      // Each text token is sent immediately as it arrives
+      stream.on("text", (text: string) => {
+        fullText += text;
+        send({ type: "delta", text });
+      });
+
+      // Wait for full response to process tool calls
+      const response = await stream.finalMessage();
 
       messages.push({ role: "assistant", content: response.content });
 
