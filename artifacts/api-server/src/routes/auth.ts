@@ -9,6 +9,27 @@ const router: IRouter = Router();
 
 const BASE_URL = process.env.BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
 
+// ── Demo login (dev/test only) ────────────────────────────────────────────────
+router.post("/auth/demo", async (req, res): Promise<void> => {
+  const DEMO_ID = "demo-user-kodu";
+  // Find or create demo user
+  let [user] = await db.select().from(usersTable).where(eq(usersTable.id, DEMO_ID));
+  if (!user) {
+    [user] = await db.insert(usersTable).values({
+      id: DEMO_ID,
+      email: "demo@kodu.live",
+      name: "Demo Хэрэглэгч",
+      provider: "demo",
+      providerId: DEMO_ID,
+    }).returning();
+  }
+  // Log in via Passport session
+  req.login(user, (err) => {
+    if (err) { res.status(500).json({ error: "Login failed" }); return; }
+    res.json({ ok: true, user });
+  });
+});
+
 // ── Passport setup ────────────────────────────────────────────────────────────
 
 passport.serializeUser((user: any, done) => {

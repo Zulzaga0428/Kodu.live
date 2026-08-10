@@ -17,6 +17,11 @@ export default function LoginPage() {
     window.location.href = `${API}/api/auth/${provider}`;
   };
 
+  const demoLogin = async () => {
+    await fetch(`${API}/api/auth/demo`, { method: "POST", credentials: "include" });
+    setLocation("/dashboard");
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -41,6 +46,22 @@ export default function LoginPage() {
           </p>
 
           <div className="flex flex-col gap-3">
+            {/* Demo login — prominent */}
+            <button
+              onClick={demoLogin}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all font-mono text-sm font-semibold group shadow-lg shadow-primary/20"
+            >
+              <span className="text-base">⚡</span>
+              <span className="flex-1 text-left">Demo хэлбэрээр нэвтрэх</span>
+              <span className="opacity-60 group-hover:opacity-100 transition-opacity">→</span>
+            </button>
+
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] font-mono text-muted-foreground">эсвэл</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
             <button
               onClick={() => login("google")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-lg border border-border bg-background hover:bg-accent/10 hover:border-primary/40 transition-all font-mono text-sm group"
