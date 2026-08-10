@@ -113,7 +113,7 @@
   --input: 240 10% 12%;
   --ring: 217 100% 50%;
 
-  --app-font-sans: 'Space Grotesk', sans-serif;
+  --app-font-sans: 'Noto Sans', 'Space Grotesk', sans-serif;
   --app-font-mono: 'JetBrains Mono', monospace;
   
   --radius: 0.5rem;
