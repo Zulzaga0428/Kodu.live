@@ -26,3 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 SAND_URL = "https://prw.kodu.live"
+ADMIN_EMAIL = "gomedia.9999@gmail.com"
