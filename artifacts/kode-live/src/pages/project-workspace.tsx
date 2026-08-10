@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 import { Link, useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
@@ -55,6 +55,20 @@ const EXT_COLOR: Record<string, string> = {
 function extColor(name: string): string {
   const ext = name.split(".").pop() ?? "";
   return EXT_COLOR[ext] ?? "text-muted-foreground";
+}
+
+function monacoLang(filename: string): string {
+  const ext = filename.split(".").pop() ?? "";
+  const map: Record<string, string> = {
+    ts: "typescript", tsx: "typescript",
+    js: "javascript", jsx: "javascript",
+    css: "css", scss: "scss",
+    json: "json", md: "markdown",
+    html: "html", yaml: "yaml", yml: "yaml",
+    py: "python", sh: "shell",
+    toml: "toml", prisma: "prisma",
+  };
+  return map[ext] ?? "plaintext";
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -317,20 +331,45 @@ function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLi
 
       <div className="flex-1 overflow-hidden">
         {tab === "code" && (
-          <div className="h-full flex">
-            <div className="select-none w-10 text-right pr-3 pt-4 pb-4 text-[11px] font-mono text-muted-foreground/40 bg-card/20 border-r border-border/30 overflow-hidden">
-              {(activeContent || "").split("\n").map((_, i) => (
-                <div key={i} className="leading-[1.6rem]">{i + 1}</div>
-              ))}
-            </div>
-            <textarea
-              value={activeContent}
-              onChange={(e) => onContentChange(e.target.value)}
-              spellCheck={false}
-              placeholder={activeFile ? "" : "← Зүүн талаас файл сонгох эсвэл агентад хэлнэ үү"}
-              className="flex-1 resize-none bg-transparent text-[13px] font-mono leading-[1.6rem] p-4 outline-none text-foreground caret-primary placeholder:text-muted-foreground/30"
-              style={{ tabSize: 2 }}
-            />
+          <div className="h-full flex flex-col">
+            {activeFile ? (
+              <Suspense fallback={
+                <div className="flex-1 flex items-center justify-center">
+                  <Loader2Icon className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              }>
+                <MonacoEditor
+                  height="100%"
+                  path={activeFile}
+                  language={monacoLang(activeFile)}
+                  value={activeContent}
+                  onChange={(v) => onContentChange(v ?? "")}
+                  theme="vs-dark"
+                  options={{
+                    fontSize: 13,
+                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    fontLigatures: true,
+                    lineHeight: 22,
+                    tabSize: 2,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: "on",
+                    renderLineHighlight: "gutter",
+                    smoothScrolling: true,
+                    cursorBlinking: "smooth",
+                    cursorSmoothCaretAnimation: "on",
+                    padding: { top: 12, bottom: 12 },
+                    overviewRulerLanes: 0,
+                    hideCursorInOverviewRuler: true,
+                    scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+                  }}
+                />
+              </Suspense>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-[11px] font-mono text-muted-foreground/40">
+                ← Зүүн талаас файл сонгох эсвэл агентад хэлнэ үү
+              </div>
+            )}
           </div>
         )}
 
@@ -448,11 +487,11 @@ function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelP
             </div>
             {updateProject.isPending && <Loader2Icon className="w-3 h-3 animate-spin text-muted-foreground" />}
           </div>
-          <Textarea
+          <textarea
             value={koduContent}
             onChange={(e) => handleKoduChange(e.target.value)}
             placeholder={"# Төслийн тэмдэглэл\n\nАрхитектур, дүрэм, контекстаа энд бичнэ үү..."}
-            className="flex-1 resize-none border-0 rounded-none focus-visible:ring-0 p-3 font-mono text-[12px] leading-relaxed bg-transparent text-muted-foreground placeholder:text-muted-foreground/30"
+            className="flex-1 resize-none border-0 rounded-none p-3 font-mono text-[12px] leading-relaxed bg-transparent text-muted-foreground placeholder:text-muted-foreground/30 outline-none"
           />
         </div>
       ) : (
@@ -913,7 +952,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
         <div className={`flex gap-2 bg-card border rounded-lg overflow-hidden transition-colors ${
           streaming ? "border-primary/60" : "border-border focus-within:border-primary/50"
         }`}>
-          <Textarea
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -921,7 +960,8 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
             }}
             placeholder={streaming ? "Kodu ажиллаж байна..." : "Kodu-д зааварч... (Enter илгээх)"}
             disabled={streaming}
-            className="min-h-[38px] h-[38px] max-h-[120px] resize-none border-0 rounded-none focus-visible:ring-0 py-2.5 px-3 text-[12px] font-mono bg-transparent disabled:opacity-50"
+            rows={1}
+            className="min-h-[38px] max-h-[120px] resize-none border-0 rounded-none py-2.5 px-3 text-[12px] font-mono bg-transparent disabled:opacity-50 outline-none flex-1"
           />
           {streaming ? (
             <Button onClick={handleStop} size="icon" variant="ghost"
