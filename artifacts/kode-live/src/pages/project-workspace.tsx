@@ -16,6 +16,7 @@ import {
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
   DownloadIcon, FolderPlusIcon, FilePlusIcon, ExternalLinkIcon,
+  SparklesIcon, CornerDownLeftIcon, StopCircleIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -1136,6 +1137,15 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
   const [statusMsg, setStatusMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const toolCallIdRef = useRef(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea as user types
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, [input]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1266,19 +1276,30 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
               <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />
             </div>
           ) : messages?.length === 0 && !streamText && toolCalls.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-44 gap-3 text-center mt-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <BotIcon className="w-6 h-6 text-primary" />
+            <div className="flex flex-col items-center justify-center gap-4 text-center mt-6 px-2">
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center shadow-lg">
+                  <SparklesIcon className="w-7 h-7 text-primary" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
               </div>
               <div>
-                <p className="text-xs font-mono font-semibold text-foreground">Kodu Agent бэлэн</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">Жишээ нь: "Todo апп хий React-аар"</p>
+                <p className="text-sm font-semibold text-foreground">Kodu Agent бэлэн</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1">Монгол эсвэл English-ээр зааварч</p>
               </div>
-              <div className="flex flex-col gap-1 w-full">
-                {["Landing page хий", "Login form нэм", "Dark mode нэм"].map((ex) => (
-                  <button key={ex} onClick={() => setInput(ex)}
-                    className="text-[10px] font-mono text-left px-2.5 py-1.5 rounded border border-border/50 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all text-muted-foreground">
-                    {ex}
+              <div className="grid grid-cols-2 gap-1.5 w-full">
+                {[
+                  { icon: "🌐", text: "Landing page хий" },
+                  { icon: "🔐", text: "Login form нэм" },
+                  { icon: "🌙", text: "Dark mode нэм" },
+                  { icon: "⚡", text: "REST API хий" },
+                  { icon: "📊", text: "Dashboard хий" },
+                  { icon: "🃏", text: "Todo апп хий" },
+                ].map(({ icon, text }) => (
+                  <button key={text} onClick={() => setInput(text)}
+                    className="text-[11px] font-mono text-left px-2.5 py-2 rounded-lg border border-border/40 hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all text-muted-foreground group flex items-center gap-2">
+                    <span className="text-base leading-none">{icon}</span>
+                    <span className="leading-snug">{text}</span>
                   </button>
                 ))}
               </div>
@@ -1325,38 +1346,83 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
         </div>
       </ScrollArea>
 
-      <div className="p-2 border-t border-border shrink-0">
+      {/* ── Premium Chat Input ─────────────────────────────── */}
+      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">
+
+        {/* Status pill */}
         {statusMsg && (
-          <p className="text-[10px] font-mono text-primary/70 mb-1 px-1 flex items-center gap-1.5">
-            <WrenchIcon className="w-2.5 h-2.5 animate-pulse" />
-            {statusMsg}
-          </p>
+          <div className="flex items-center gap-1.5 mb-2 px-1">
+            <span className="flex h-1.5 w-1.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+            </span>
+            <p className="text-[10px] font-mono text-primary/80">{statusMsg}</p>
+          </div>
         )}
-        <div className={`flex gap-2 bg-card border rounded-lg overflow-hidden transition-colors ${
-          streaming ? "border-primary/60" : "border-border focus-within:border-primary/50"
+
+        {/* Input box */}
+        <div className={`relative rounded-xl border transition-all duration-200 ${
+          streaming
+            ? "border-primary/70 bg-primary/[0.03] shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]"
+            : "border-border/60 bg-card focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.06)]"
         }`}>
+
+          {/* Textarea */}
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
-            placeholder={streaming ? "Kodu ажиллаж байна..." : "Kodu-д зааварч... (Enter илгээх)"}
+            placeholder={streaming ? "Kodu ажиллаж байна..." : "Зааварч... (жишээ нь: Landing page хий)"}
             disabled={streaming}
             rows={1}
-            className="min-h-[38px] max-h-[120px] resize-none border-0 rounded-none py-2.5 px-3 text-[12px] font-mono bg-transparent disabled:opacity-50 outline-none flex-1"
+            className="w-full resize-none border-0 bg-transparent outline-none px-3.5 pt-3 pb-2 text-[12.5px] font-mono leading-relaxed placeholder:text-muted-foreground/40 disabled:opacity-40 min-h-[44px] max-h-[160px]"
           />
-          {streaming ? (
-            <Button onClick={handleStop} size="icon" variant="ghost"
-              className="h-full rounded-none w-9 shrink-0 text-destructive hover:text-destructive">
-              <span className="w-3 h-3 rounded-sm bg-destructive" />
-            </Button>
-          ) : (
-            <Button onClick={handleSend} disabled={!input.trim()} size="icon"
-              className="h-full rounded-none w-9 shrink-0">
-              <SendIcon className="w-3.5 h-3.5" />
-            </Button>
-          )}
+
+          {/* Bottom bar */}
+          <div className="flex items-center justify-between px-2.5 pb-2 gap-2">
+            {/* Left: model badge */}
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/8 border border-primary/15 text-primary/70">
+                <SparklesIcon className="w-2.5 h-2.5" />
+                <span className="text-[9px] font-mono font-medium">
+                  {agentSettings.model.includes("sonnet") ? "Sonnet" : agentSettings.model.includes("haiku") ? "Haiku" : agentSettings.model.includes("opus") ? "Opus" : "Claude"}
+                </span>
+              </div>
+              {!streaming && input.length > 0 && (
+                <span className="text-[9px] font-mono text-muted-foreground/40">{input.length} тэмдэгт</span>
+              )}
+            </div>
+
+            {/* Right: hint + button */}
+            <div className="flex items-center gap-2">
+              {!streaming && (
+                <span className="text-[9px] font-mono text-muted-foreground/30 hidden sm:flex items-center gap-0.5">
+                  <CornerDownLeftIcon className="w-2.5 h-2.5" /> илгээх
+                </span>
+              )}
+              {streaming ? (
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-destructive/10 hover:bg-destructive/20 border border-destructive/20 text-destructive transition-all text-[10px] font-mono font-medium"
+                >
+                  <span className="w-2 h-2 rounded-sm bg-destructive animate-pulse" />
+                  Зогсоох
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed text-primary-foreground transition-all text-[10px] font-mono font-medium shadow-sm"
+                >
+                  <SendIcon className="w-2.5 h-2.5" />
+                  Илгээх
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
