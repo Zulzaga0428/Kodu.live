@@ -10,6 +10,7 @@ import ProjectWorkspace from '@/pages/project-workspace';
 import LoginPage from '@/pages/login';
 import PricingPage from '@/pages/pricing';
 import AdminPage from '@/pages/admin';
+import TemplatesPage from '@/pages/templates';
 
 import {
   Route,
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/projects/:id" component={ProjectWorkspace} />
         <Route path="/pricing" component={PricingPage} />
         <Route path="/admin" component={AdminPage} />
+        <Route path="/templates" component={TemplatesPage} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

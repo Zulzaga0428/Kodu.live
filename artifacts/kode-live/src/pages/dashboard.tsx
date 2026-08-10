@@ -23,6 +23,7 @@ import {
   MessageSquareIcon, LayoutListIcon, Loader2Icon, FolderIcon,
   ZapIcon, SettingsIcon, SearchIcon, GridIcon, ListIcon,
   ChevronRightIcon, ClockIcon, TrendingUpIcon, LogOutIcon, ShieldIcon,
+  LayoutTemplateIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -422,35 +423,47 @@ function StatCard({ label, value, sub, loading, icon, accent }: {
 
 function ProjectCard({ project }: { project: any }) {
   const accent = projectAccent(project.name);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const [isTemplate, setIsTemplate] = useState(project.isTemplate ?? false);
+  const [publishing, setPublishing] = useState(false);
+
+  const toggleTemplate = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPublishing(true);
+    try {
+      const r = await fetch(`${BASE}/api/projects/${project.id}/template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publish: !isTemplate, category: "general" }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        setIsTemplate(!isTemplate);
+        toast({ title: isTemplate ? "Template-ээс хасагдлаа" : "✅ Template болгогдлоо! Нүүр хуудаст харагдана." });
+      }
+    } catch { /**/ } finally { setPublishing(false); }
+  };
+
   return (
     <Link href={`/projects/${project.id}`}>
       <div className="group rounded-xl border border-border/50 bg-card/30 hover:border-border hover:bg-card/50 transition-all cursor-pointer h-full flex flex-col overflow-hidden">
-        {/* Color accent strip */}
         <div className={`h-0.5 w-full ${accent}`} />
         <div className="p-4 flex flex-col gap-3 flex-1">
-          {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-mono font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-1">
               {project.name}
             </h3>
-            <Badge
-              variant={statusVariant(project.status)}
-              className="text-[9px] font-mono uppercase px-1.5 h-4 shrink-0"
-            >
+            <Badge variant={statusVariant(project.status)} className="text-[9px] font-mono uppercase px-1.5 h-4 shrink-0">
               {statusLabel(project.status)}
             </Badge>
           </div>
-
-          {/* Description */}
           {project.description && (
             <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{project.description}</p>
           )}
-
           <div className="flex-1" />
-
-          {/* Footer stats */}
           <div className="flex items-center justify-between text-muted-foreground">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 text-[11px] font-mono">
                 <MessageSquareIcon className="w-3 h-3" /> {project.messageCount ?? 0}
               </span>
@@ -458,9 +471,23 @@ function ProjectCard({ project }: { project: any }) {
                 <LayoutListIcon className="w-3 h-3" /> {project.taskCount ?? 0}
               </span>
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground/50">
-              {format(new Date(project.createdAt), "MMM d")}
-            </span>
+            {/* Template toggle */}
+            <button
+              onClick={toggleTemplate}
+              disabled={publishing}
+              title={isTemplate ? "Template-ээс хасах" : "Template болгох"}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono transition-all border ${
+                isTemplate
+                  ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
+                  : "border-transparent text-muted-foreground/40 hover:border-border hover:text-muted-foreground opacity-0 group-hover:opacity-100"
+              }`}
+            >
+              {publishing
+                ? <Loader2Icon className="w-3 h-3 animate-spin" />
+                : <LayoutTemplateIcon className="w-3 h-3" />
+              }
+              {isTemplate ? "Template" : "Болгох"}
+            </button>
           </div>
         </div>
       </div>

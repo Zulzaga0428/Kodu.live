@@ -1,222 +1,316 @@
-import { Link } from "wouter";
-import { TerminalSquareIcon, BotIcon, ZapIcon, GlobeIcon, ArrowRightIcon, CodeIcon, CheckIcon } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import {
+  ArrowRightIcon, ZapIcon, BrainIcon, MicroscopeIcon,
+  LayoutTemplateIcon, SendIcon, SparklesIcon, GitForkIcon,
+  Loader2Icon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-const FEATURES = [
-  {
-    icon: <BotIcon className="w-5 h-5 text-primary" />,
-    title: "AI Кодчиллын Агент",
-    sub: "AI Coding Agent",
-    desc: "Kodu агент таны кодыг уншиж, алдааг олж, шийдлийг санал болгоно. Claude-д суурилсан.",
-  },
-  {
-    icon: <ZapIcon className="w-5 h-5 text-yellow-400" />,
-    title: "Шуурхай Ажиллагаа",
-    sub: "Lightning Fast",
-    desc: "Vite + Edge runtime ашиглан хурдан build, preview болон deploy хийнэ.",
-  },
-  {
-    icon: <CodeIcon className="w-5 h-5 text-emerald-400" />,
-    title: "Олон Хэл Дэмжлэг",
-    sub: "Multi-language",
-    desc: "TypeScript, Python, Go, Rust — бүх технологийн стэк нэг дор. Package manager дуусгасан.",
-  },
-  {
-    icon: <GlobeIcon className="w-5 h-5 text-blue-400" />,
-    title: "Монгол хэлний Тоолуур",
-    sub: "Mongolian First",
-    desc: "Монгол хөгжүүлэгчдэд зориулсан анхны AI кодчиллын платформ.",
-  },
+const CATEGORIES = ["Бүгд", "Landing", "Dashboard", "Portfolio", "SaaS", "Blog", "E-commerce"];
+
+const TEMPLATE_COLORS = [
+  "from-violet-900/60 to-indigo-900/60",
+  "from-blue-900/60 to-cyan-900/60",
+  "from-emerald-900/60 to-teal-900/60",
+  "from-orange-900/60 to-red-900/60",
+  "from-pink-900/60 to-rose-900/60",
+  "from-yellow-900/60 to-amber-900/60",
 ];
 
-const TERMINAL_LINES = [
-  { prefix: "$", text: " kode init my-saas-app", color: "text-primary" },
-  { prefix: "✓", text: " Scaffolded Next.js + TypeScript", color: "text-emerald-400" },
-  { prefix: "✓", text: " Configured Drizzle ORM + PostgreSQL", color: "text-emerald-400" },
-  { prefix: "✓", text: " Auth routes ready", color: "text-emerald-400" },
-  { prefix: "~", text: " Kodu: Юу хийлгэх вэ? // What should I build?", color: "text-yellow-400" },
-  { prefix: ">", text: " Хэрэглэгчийн бүртгэлийн хуудас нэмнэ үү", color: "text-muted-foreground" },
-  { prefix: "⟳", text: " Generating registration page...", color: "text-primary animate-pulse" },
-];
+type Template = {
+  id: string; name: string; description: string | null;
+  thumbnailUrl: string | null; templateCategory: string | null;
+  templateAuthor: string | null; forkCount: number;
+};
+
+function TemplateCard({ t, idx, onFork, forking }: {
+  t: Template; idx: number; onFork: (id: string) => void; forking: string | null;
+}) {
+  const gradient = TEMPLATE_COLORS[idx % TEMPLATE_COLORS.length];
+  return (
+    <div className="group rounded-2xl border border-white/10 overflow-hidden hover:border-white/20 transition-all hover:-translate-y-0.5 bg-[#111318]">
+      {/* Thumbnail */}
+      <div className={`h-40 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
+        {t.thumbnailUrl ? (
+          <img src={t.thumbnailUrl} alt={t.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <LayoutTemplateIcon className="w-12 h-12 text-white/10" />
+            <div className="absolute bottom-3 left-3">
+              <div className="w-20 h-2 bg-white/10 rounded mb-1.5" />
+              <div className="w-14 h-1.5 bg-white/8 rounded mb-1" />
+              <div className="w-16 h-1.5 bg-white/8 rounded" />
+            </div>
+          </div>
+        )}
+        {/* Fork button */}
+        <button
+          onClick={() => onFork(t.id)}
+          disabled={forking === t.id}
+          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/90 hover:bg-white text-black text-[11px] font-bold font-mono shadow-lg disabled:opacity-50"
+        >
+          {forking === t.id
+            ? <Loader2Icon className="w-3 h-3 animate-spin" />
+            : <GitForkIcon className="w-3 h-3" />
+          }
+          Авах
+        </button>
+      </div>
+      {/* Info */}
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <h3 className="font-semibold text-sm text-white truncate">{t.name}</h3>
+          {t.templateCategory && (
+            <Badge variant="outline" className="text-[9px] font-mono border-white/15 text-white/50 shrink-0">
+              {t.templateCategory}
+            </Badge>
+          )}
+        </div>
+        {t.description && (
+          <p className="text-[11px] text-white/40 line-clamp-2 mb-2">{t.description}</p>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-white/30 font-mono">{t.templateAuthor ?? "Нэргүй"}</span>
+          <span className="text-[10px] text-white/30 font-mono flex items-center gap-0.5">
+            <GitForkIcon className="w-2.5 h-2.5" /> {t.forkCount}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
+  const [, setLocation] = useLocation();
+  const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState<"fast" | "smart" | "deep">("smart");
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [activeCategory, setActiveCategory] = useState("Бүгд");
+  const [forking, setForking] = useState<string | null>(null);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  useEffect(() => {
+    fetch(`${BASE}/api/templates`)
+      .then(r => r.json())
+      .then(d => setTemplates(d.templates ?? []))
+      .catch(() => {});
+  }, []);
+
+  const filteredTemplates = activeCategory === "Бүгд"
+    ? templates
+    : templates.filter(t => t.templateCategory === activeCategory);
+
+  const handlePromptSubmit = () => {
+    if (!prompt.trim()) return;
+    setLocation(`/dashboard?prompt=${encodeURIComponent(prompt)}`);
+  };
+
+  const handleFork = async (id: string) => {
+    setForking(id);
+    try {
+      const r = await fetch(`${BASE}/api/templates/${id}/fork`, { method: "POST" });
+      const d = await r.json();
+      if (d.project?.id) setLocation(`/projects/${d.project.id}`);
+      else setLocation("/dashboard");
+    } catch {
+      setLocation("/dashboard");
+    } finally { setForking(null); }
+  };
+
+  const MODEL_OPTS = [
+    { id: "fast" as const,  label: "Fast",  cost: "4кр",  icon: <ZapIcon className="w-3 h-3 text-yellow-400" /> },
+    { id: "smart" as const, label: "Smart", cost: "7кр",  icon: <BrainIcon className="w-3 h-3 text-blue-400" /> },
+    { id: "deep" as const,  label: "Deep",  cost: "25кр", icon: <MicroscopeIcon className="w-3 h-3 text-purple-400" /> },
+  ];
+  const activeModel = MODEL_OPTS.find(m => m.id === model)!;
+
   return (
-    <div className="min-h-[100dvh] w-full bg-background text-foreground flex flex-col">
+    <div className="min-h-[100dvh] w-full bg-[#080a10] text-white flex flex-col">
       {/* ── Navbar ── */}
-      <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto px-6 h-14 flex items-center justify-between max-w-6xl">
+      <nav className="sticky top-0 z-50 border-b border-white/8 bg-[#080a10]/90 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <TerminalSquareIcon className="w-5 h-5 text-primary" />
-            <span className="font-bold font-mono text-lg tracking-tight">kodu<span className="text-primary">.live</span></span>
+            <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
+              <span className="font-black text-white text-xs">K</span>
+            </div>
+            <span className="font-bold text-base tracking-tight">
+              Ko<span className="text-violet-400">Du</span>
+            </span>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="hidden md:flex items-center gap-6 text-sm text-white/50 font-mono">
+            <a href="#templates" className="hover:text-white transition-colors">Templates</a>
+            <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
+          </div>
+
+          <div className="flex items-center gap-2">
             <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="font-mono text-sm text-muted-foreground hover:text-foreground">
-                Dashboard
-              </Button>
+              <button className="text-sm font-mono text-white/50 hover:text-white px-3 py-1.5 transition-colors">
+                Нэвтрэх
+              </button>
             </Link>
             <Link href="/dashboard">
-              <Button size="sm" className="font-mono text-sm">
-                Эхлэх <ArrowRightIcon className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
+              <button className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-mono font-semibold px-4 py-1.5 rounded-lg transition-colors">
+                Үнэгүй эхлэх
+              </button>
             </Link>
           </div>
         </div>
       </nav>
 
       {/* ── Hero ── */}
-      <section className="flex-1 flex flex-col items-center justify-center px-6 py-24 relative overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 left-1/4 w-[300px] h-[300px] bg-blue-500/3 rounded-full blur-3xl pointer-events-none" />
+      <section className="flex flex-col items-center justify-center px-6 pt-24 pb-16 relative overflow-hidden">
+        {/* BG glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-20 left-1/3 w-[300px] h-[300px] bg-blue-600/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 border border-primary/30 bg-primary/5 rounded-full px-4 py-1.5 mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs font-mono text-primary tracking-wide">Монгол хөгжүүлэгчдэд зориулсан AI орчин</span>
-          </div>
-
+        <div className="relative z-10 max-w-3xl mx-auto text-center">
           {/* Headline */}
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-[1.05]">
-            <span className="text-foreground">Код бичих нь</span>
-            <br />
-            <span className="bg-gradient-to-r from-primary via-blue-400 to-primary bg-clip-text text-transparent">
-              хэзээ ч ийм хялбар
-            </span>
-            <br />
-            <span className="text-foreground/60 text-4xl md:text-5xl font-bold">байгаагүй.</span>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 leading-[1.05]">
+            Мөрөөдлийн сайтаа<br />
+            <span className="text-violet-400">хий.</span>
           </h1>
-
-          {/* Subheadline */}
-          <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-            AI агенттай хамт кодоо бичиж, шалгаж, нийтлэ.{" "}
-            <span className="text-foreground/60">Claude-д суурилсан — монгол хэлээр ажилладаг анхны платформ.</span>
+          <p className="text-white/40 text-base md:text-lg mb-10 font-mono">
+            KoDu — таны санааг 5 минутад бодит болгоно.
           </p>
 
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-            <Link href="/dashboard">
-              <Button size="lg" className="font-mono text-base px-8 h-12 gap-2 shadow-lg shadow-primary/20">
-                Үнэгүй эхлэх
-                <ArrowRightIcon className="w-4 h-4" />
-              </Button>
-            </Link>
-            <Link href="/projects/proj-1">
-              <Button variant="outline" size="lg" className="font-mono text-base px-8 h-12 border-border/60 text-muted-foreground hover:text-foreground">
-                Demo харах
-              </Button>
-            </Link>
+          {/* AI input box */}
+          <div className="max-w-2xl mx-auto rounded-2xl border border-white/12 bg-[#0e1017] overflow-hidden shadow-2xl shadow-black/60 mb-4">
+            {/* Model tabs */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <div className="flex items-center gap-1">
+                {MODEL_OPTS.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setModel(m.id)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-all ${
+                      model === m.id
+                        ? "bg-violet-600/20 text-violet-300 border border-violet-500/30"
+                        : "text-white/30 hover:text-white/60"
+                    }`}
+                  >
+                    {m.icon} {m.label}
+                  </button>
+                ))}
+              </div>
+              <span className="flex items-center gap-1 text-[11px] font-mono text-white/30">
+                {activeModel.icon}
+                <span className="text-violet-400 font-bold">{activeModel.cost}</span>
+              </span>
+            </div>
+
+            {/* Textarea */}
+            <div className="px-4 pb-2">
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(); } }}
+                placeholder="Юу хийлгэх вэ? (жишээ: кофе шопны landing page хий)"
+                rows={3}
+                className="w-full bg-transparent text-white/90 text-sm font-mono placeholder:text-white/20 outline-none resize-none leading-relaxed"
+              />
+            </div>
+
+            {/* Bottom bar */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-white/8">
+              <div className="flex items-center gap-2 text-[11px] font-mono text-white/25">
+                <SparklesIcon className="w-3 h-3" />
+                <span>Powered by Zulzaga AI</span>
+              </div>
+              <button
+                onClick={handlePromptSubmit}
+                disabled={!prompt.trim()}
+                className="w-8 h-8 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              >
+                <SendIcon className="w-3.5 h-3.5 text-white" />
+              </button>
+            </div>
           </div>
 
-          {/* Terminal mockup */}
-          <div className="max-w-2xl mx-auto rounded-xl border border-border/60 overflow-hidden shadow-2xl shadow-black/40 text-left">
-            {/* Window chrome */}
-            <div className="bg-card border-b border-border/60 px-4 h-9 flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-red-500/70" />
-              <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
-              <span className="w-3 h-3 rounded-full bg-green-500/70" />
-              <span className="flex-1 text-center text-[11px] font-mono text-muted-foreground/60">kodu.live — terminal</span>
-            </div>
-            {/* Terminal body */}
-            <div className="bg-[#0a0a0f] p-5 font-mono text-[13px] flex flex-col gap-1.5">
-              {TERMINAL_LINES.map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className={`${line.color} shrink-0 w-4`}>{line.prefix}</span>
-                  <span className={`${line.color} ${line.color.includes("animate") ? "animate-pulse" : ""}`}>{line.text}</span>
-                </div>
-              ))}
-              <div className="flex gap-2 mt-1">
-                <span className="text-muted-foreground/40 shrink-0 w-4">|</span>
-                <span className="w-2 h-4 bg-primary/80 animate-pulse inline-block" />
-              </div>
-            </div>
-          </div>
+          <p className="text-[11px] font-mono text-white/20">
+            Enter дарж эхлэнэ · Шинэ хэрэглэгч бүр 50кр үнэгүй авна
+          </p>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section className="py-24 px-6 border-t border-border/30">
-        <div className="container mx-auto max-w-6xl">
-          <div className="text-center mb-14">
-            <p className="text-xs font-mono text-primary uppercase tracking-widest mb-3">Боломжууд</p>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-              Хөгжүүлэгчид хэрэгтэй бүх зүйл
-            </h2>
-            <p className="text-muted-foreground mt-3 text-base max-w-xl mx-auto">
-              Нэг дор: агент, редактор, preview, deploy — монгол хэлээр.
-            </p>
+      {/* ── Templates ── */}
+      <section id="templates" className="px-6 pb-24">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Templates</h2>
+            <Link href="/templates">
+              <button className="text-xs font-mono text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
+                Бүгдийг харах <ArrowRightIcon className="w-3 h-3" />
+              </button>
+            </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {FEATURES.map((f, i) => (
-              <div key={i} className="rounded-xl border border-border/50 bg-card/30 p-5 hover:border-border transition-colors group">
-                <div className="w-9 h-9 rounded-lg bg-card border border-border/60 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  {f.icon}
-                </div>
-                <h3 className="font-semibold text-sm mb-0.5">{f.title}</h3>
-                <p className="text-[10px] font-mono text-muted-foreground/50 mb-2 uppercase tracking-wide">{f.sub}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
-              </div>
+          {/* Category pills */}
+          <div className="flex gap-2 flex-wrap mb-6">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                  activeCategory === cat
+                    ? "bg-violet-600 text-white"
+                    : "border border-white/10 text-white/40 hover:border-white/20 hover:text-white/60"
+                }`}
+              >
+                {cat}
+              </button>
             ))}
           </div>
+
+          {filteredTemplates.length === 0 ? (
+            <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl">
+              <LayoutTemplateIcon className="w-10 h-10 text-white/10 mx-auto mb-3" />
+              <p className="text-white/30 text-sm font-mono">
+                {templates.length === 0
+                  ? "Одоохондоо template байхгүй байна — та анхных нь болоорой!"
+                  : "Энэ ангилалд template байхгүй"
+                }
+              </p>
+              <Link href="/dashboard">
+                <button className="mt-4 text-xs font-mono text-violet-400 hover:text-violet-300 transition-colors">
+                  Шинэ project эхлэх →
+                </button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredTemplates.map((t, i) => (
+                <TemplateCard key={t.id} t={t} idx={i} onFork={handleFork} forking={forking} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
       {/* ── Stats strip ── */}
-      <section className="py-12 px-6 border-t border-border/30 bg-card/10">
-        <div className="container mx-auto max-w-4xl">
-          <div className="grid grid-cols-3 gap-8 text-center">
-            {[
-              { val: "129+", label: "Хөгжүүлэгч", sub: "Active developers" },
-              { val: "Claude", label: "AI Хөдөлгүүр", sub: "Powered by Anthropic" },
-              { val: "100%", label: "Монгол хэл", sub: "Native Mongolian" },
-            ].map((s, i) => (
-              <div key={i}>
-                <div className="text-3xl font-black font-mono text-primary mb-1">{s.val}</div>
-                <div className="text-sm font-semibold text-foreground">{s.label}</div>
-                <div className="text-[11px] font-mono text-muted-foreground mt-0.5">{s.sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA banner ── */}
-      <section className="py-24 px-6 border-t border-border/30">
-        <div className="container mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
-            Өнөөдөр эхлэ.
-          </h2>
-          <p className="text-muted-foreground mb-8 text-base">
-            Бүртгэл шаардлагагүй — шууд үнэгүй ашиглаарай.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            {["Next.js", "TypeScript", "Tailwind CSS", "PostgreSQL", "Drizzle"].map((tag) => (
-              <span key={tag} className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground/70">
-                <CheckIcon className="w-3 h-3 text-primary" /> {tag}
-              </span>
-            ))}
-          </div>
-          <div className="mt-10">
-            <Link href="/dashboard">
-              <Button size="lg" className="font-mono px-10 h-12 text-base shadow-xl shadow-primary/20">
-                Одоо эхлэх — Үнэгүй
-                <ArrowRightIcon className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
-          </div>
+      <section className="py-12 px-6 border-t border-white/8 bg-white/2">
+        <div className="max-w-4xl mx-auto grid grid-cols-3 gap-8 text-center">
+          {[
+            { val: "129+", label: "Хөгжүүлэгч", sub: "Active developers" },
+            { val: "Claude", label: "AI Хөдөлгүүр", sub: "Powered by Anthropic" },
+            { val: "100%", label: "Монгол хэл", sub: "Native Mongolian" },
+          ].map((s, i) => (
+            <div key={i}>
+              <div className="text-3xl font-black font-mono text-violet-400 mb-1">{s.val}</div>
+              <div className="text-sm font-semibold text-white">{s.label}</div>
+              <div className="text-[11px] font-mono text-white/30 mt-0.5">{s.sub}</div>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-border/30 py-6 px-6">
-        <div className="container mx-auto max-w-6xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <TerminalSquareIcon className="w-4 h-4 text-primary/60" />
-            <span className="font-mono text-sm text-muted-foreground/60">kodu.live</span>
-          </div>
-          <p className="text-xs font-mono text-muted-foreground/40">© 2026 kodu.live — Made in Mongolia 🇲🇳</p>
+      <footer className="border-t border-white/8 py-6 px-6">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <span className="font-mono text-sm text-white/30">kodu.live</span>
+          <p className="text-xs font-mono text-white/20">© 2026 kodu.live — Made in Mongolia 🇲🇳</p>
         </div>
       </footer>
     </div>

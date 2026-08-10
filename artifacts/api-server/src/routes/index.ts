@@ -8,6 +8,7 @@ import authRouter from "./auth";
 import sandRouter from "./sand";
 import creditsRouter from "./credits";
 import adminRouter from "./admin";
+import templatesRouter from "./templates";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(chatRouter);
 router.use(sandRouter);
 router.use(creditsRouter);
 router.use(adminRouter);
+router.use(templatesRouter);
 
 export default router;
