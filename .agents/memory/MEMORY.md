@@ -1,0 +1,1 @@
+- [Agentic loop](agentic-loop.md) — tool use + SSE streaming fully wired; Express 5 wildcard route fix required

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -11,9 +11,9 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import {
   ArrowLeftIcon, SendIcon, CheckCircle2Icon, CircleIcon, ClockIcon,
   Trash2Icon, Loader2Icon, SettingsIcon, PlusIcon, MessageSquareIcon,
-  FolderIcon, FileIcon, FileTextIcon, ChevronRightIcon, ChevronDownIcon,
+  FolderIcon, FileTextIcon, ChevronRightIcon, ChevronDownIcon,
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
-  FileCodeIcon, RefreshCwIcon, MoreHorizontalIcon, ZapIcon
+  FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -40,51 +40,22 @@ import {
 
 type AgentTab = "agent" | "planner";
 type WorkspaceTab = "code" | "preview" | "terminal";
+type FileEntry = { path: string; type: "file" | "dir" };
+type TerminalLine = { text: string; type: "cmd" | "output" | "success" | "error" | "info" };
 
-// Simulated file tree
-const FILE_TREE = [
-  { id: "1", name: "src", type: "folder" as const, depth: 0, open: true },
-  { id: "2", name: "app", type: "folder" as const, depth: 1, open: true },
-  { id: "3", name: "page.tsx", type: "file" as const, depth: 2, ext: "tsx" },
-  { id: "4", name: "layout.tsx", type: "file" as const, depth: 2, ext: "tsx" },
-  { id: "5", name: "globals.css", type: "file" as const, depth: 2, ext: "css" },
-  { id: "6", name: "components", type: "folder" as const, depth: 1, open: true },
-  { id: "7", name: "ui", type: "folder" as const, depth: 2, open: false },
-  { id: "8", name: "Header.tsx", type: "file" as const, depth: 2, ext: "tsx" },
-  { id: "9", name: "Footer.tsx", type: "file" as const, depth: 2, ext: "tsx" },
-  { id: "10", name: "lib", type: "folder" as const, depth: 1, open: false },
-  { id: "11", name: "public", type: "folder" as const, depth: 0, open: false },
-  { id: "12", name: "package.json", type: "file" as const, depth: 0, ext: "json" },
-  { id: "13", name: "next.config.ts", type: "file" as const, depth: 0, ext: "ts" },
-  { id: "14", name: "kodu.md", type: "file" as const, depth: 0, ext: "md" },
-];
+// ── File ext helpers ──────────────────────────────────────────────────────────
 
-const STARTER_CODE = `import { NextRequest, NextResponse } from "next/server";
+const EXT_COLOR: Record<string, string> = {
+  tsx: "text-blue-400", ts: "text-blue-500", jsx: "text-blue-300",
+  js: "text-yellow-400", css: "text-pink-400", scss: "text-pink-300",
+  json: "text-yellow-300", md: "text-green-400", html: "text-orange-400",
+  py: "text-emerald-400", env: "text-muted-foreground",
+};
 
-export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col 
-      items-center justify-center p-24">
-      <h1 className="text-4xl font-bold">
-        Сайн уу, kodu.live! 👋
-      </h1>
-      <p className="mt-4 text-lg text-muted-foreground">
-        Таны Next.js апп бэлэн боллоо.
-      </p>
-    </main>
-  );
-}`;
-
-const TERMINAL_LINES = [
-  { text: "$ pnpm install", type: "cmd" as const },
-  { text: "Packages: +342", type: "info" as const },
-  { text: "Done in 4.2s", type: "success" as const },
-  { text: "$ pnpm run dev", type: "cmd" as const },
-  { text: "  ▲ Next.js 15.0.0", type: "info" as const },
-  { text: "  - Local:  http://localhost:3000", type: "info" as const },
-  { text: "  ✓ Ready in 892ms", type: "success" as const },
-  { text: "$ _", type: "cursor" as const },
-];
+function extColor(name: string): string {
+  const ext = name.split(".").pop() ?? "";
+  return EXT_COLOR[ext] ?? "text-muted-foreground";
+}
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
@@ -107,6 +78,51 @@ export default function ProjectWorkspace() {
   const [, setLocation] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  // ── Shared editor state ─────────────────────────────────────────────────────
+  const [fileTree, setFileTree] = useState<FileEntry[]>([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [activeContent, setActiveContent] = useState<string>("");
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
+    { text: "$ Kodu Agent бэлэн байна. Зааварчилгаагаа бичнэ үү.", type: "info" },
+  ]);
+
+  // Fetch file tree from API
+  const fetchFileTree = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${id}/files`);
+      const data = await res.json();
+      if (data.files) setFileTree(data.files);
+    } catch {}
+  }, [id]);
+
+  useEffect(() => { fetchFileTree(); }, [fetchFileTree]);
+
+  // Called by ChatPanel when agent writes/deletes a file
+  const handleFileChanged = useCallback((path: string, content: string) => {
+    if (activeFile === path) setActiveContent(content);
+  }, [activeFile]);
+
+  const handleFileTree = useCallback((files: FileEntry[]) => {
+    setFileTree(files);
+  }, []);
+
+  const handleTerminalLine = useCallback((line: TerminalLine) => {
+    setTerminalLines((prev) => [...prev.slice(-200), line]);
+  }, []);
+
+  // Load file content when user clicks a file
+  const handleSelectFile = useCallback(async (path: string) => {
+    setActiveFile(path);
+    try {
+      const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${BASE}/api/projects/${id}/file?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (data.content !== undefined) setActiveContent(data.content);
+    } catch {
+      setActiveContent("// Файл уншиж чадсангүй");
+    }
+  }, [id]);
 
   const { data: project, isLoading, error } = useGetProject(id, {
     query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) },
@@ -141,7 +157,6 @@ export default function ProjectWorkspace() {
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       {/* ── Top bar ── */}
       <header className="h-11 border-b border-border flex items-center justify-between px-3 shrink-0 bg-card z-10">
-        {/* Left */}
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
@@ -160,19 +175,17 @@ export default function ProjectWorkspace() {
           </div>
         </div>
 
-        {/* Center: action buttons */}
         <div className="flex items-center gap-1">
           <Button size="sm" className="h-7 gap-1.5 text-xs font-mono px-3">
             <PlayIcon className="w-3 h-3" />
             Ажиллуулах
           </Button>
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs font-mono px-3">
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs font-mono px-3" onClick={fetchFileTree}>
             <RefreshCwIcon className="w-3 h-3" />
             Шинэчлэх
           </Button>
         </div>
 
-        {/* Right */}
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -185,15 +198,9 @@ export default function ProjectWorkspace() {
                 <SettingsIcon className="w-3 h-3 mr-2" /> Тохиргоо
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.active)}>
-                Идэвхтэй болгох
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.completed)}>
-                Дууссан болгох
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.archived)}>
-                Архивлах
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.active)}>Идэвхтэй болгох</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.completed)}>Дууссан болгох</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.archived)}>Архивлах</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                 <Trash2Icon className="w-3 h-3 mr-2" /> Устгах
@@ -206,26 +213,33 @@ export default function ProjectWorkspace() {
       {/* ── Three-panel workspace ── */}
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" className="h-full">
-
-          {/* ── Panel 1: Agent ── */}
           <ResizablePanel defaultSize={28} minSize={20} className="flex flex-col">
-            <AgentPanel projectId={id} project={project} />
+            <AgentPanel
+              projectId={id}
+              project={project}
+              onFileChanged={handleFileChanged}
+              onFileTree={handleFileTree}
+              onTerminalLine={handleTerminalLine}
+            />
           </ResizablePanel>
-
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
-
-          {/* ── Panel 2: Code / Preview / Terminal ── */}
           <ResizablePanel defaultSize={47} minSize={30} className="flex flex-col">
-            <WorkspacePanel />
+            <WorkspacePanel
+              activeFile={activeFile}
+              activeContent={activeContent}
+              onContentChange={setActiveContent}
+              terminalLines={terminalLines}
+            />
           </ResizablePanel>
-
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
-
-          {/* ── Panel 3: Files ── */}
           <ResizablePanel defaultSize={25} minSize={16} className="flex flex-col">
-            <FilesPanel project={project} />
+            <FilesPanel
+              project={project}
+              fileTree={fileTree}
+              activeFile={activeFile}
+              onSelectFile={handleSelectFile}
+            />
           </ResizablePanel>
-
         </ResizablePanelGroup>
       </div>
     </div>
@@ -234,20 +248,31 @@ export default function ProjectWorkspace() {
 
 // ── Agent Panel (left) ────────────────────────────────────────────────────────
 
-function AgentPanel({ projectId, project }: { projectId: string; project: any }) {
+type AgentPanelProps = {
+  projectId: string;
+  project: any;
+  onFileChanged: (path: string, content: string) => void;
+  onFileTree: (files: FileEntry[]) => void;
+  onTerminalLine: (line: TerminalLine) => void;
+};
+
+function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalLine }: AgentPanelProps) {
   const [tab, setTab] = useState<AgentTab>("agent");
 
   return (
     <div className="flex flex-col h-full bg-[hsl(240_10%_5%)]">
-      {/* Tab bar */}
       <div className="flex border-b border-border shrink-0">
         <TabBtn active={tab === "agent"} onClick={() => setTab("agent")} icon={<BotIcon className="w-3 h-3" />} label="Kodu Agent" />
         <TabBtn active={tab === "planner"} onClick={() => setTab("planner")} icon={<ListTodoIcon className="w-3 h-3" />} label="Төлөвлөгөө" />
       </div>
-
       <div className="flex-1 overflow-hidden">
         {tab === "agent" ? (
-          <ChatPanel projectId={projectId} />
+          <ChatPanel
+            projectId={projectId}
+            onFileChanged={onFileChanged}
+            onFileTree={onFileTree}
+            onTerminalLine={onTerminalLine}
+          />
         ) : (
           <PlannerPanel projectId={projectId} />
         )}
@@ -258,43 +283,52 @@ function AgentPanel({ projectId, project }: { projectId: string; project: any })
 
 // ── Workspace Panel (center) ──────────────────────────────────────────────────
 
-function WorkspacePanel() {
+type WorkspacePanelProps = {
+  activeFile: string | null;
+  activeContent: string;
+  onContentChange: (c: string) => void;
+  terminalLines: TerminalLine[];
+};
+
+function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLines }: WorkspacePanelProps) {
   const [tab, setTab] = useState<WorkspaceTab>("code");
-  const [code, setCode] = useState(STARTER_CODE);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["1", "2", "6"]));
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (tab === "terminal" && terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [terminalLines, tab]);
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Tab bar */}
       <div className="flex items-center border-b border-border shrink-0 bg-card/40">
         <TabBtn active={tab === "code"} onClick={() => setTab("code")} icon={<CodeIcon className="w-3 h-3" />} label="Код" />
         <TabBtn active={tab === "preview"} onClick={() => setTab("preview")} icon={<MonitorIcon className="w-3 h-3" />} label="Preview" />
         <TabBtn active={tab === "terminal"} onClick={() => setTab("terminal")} icon={<TerminalIcon className="w-3 h-3" />} label="Terminal" />
-        <div className="ml-auto flex items-center pr-2 gap-1">
-          {tab === "preview" && (
-            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground border border-border rounded px-2 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              localhost:3000
-            </div>
-          )}
-        </div>
+        {activeFile && (
+          <div className="ml-auto flex items-center pr-3 gap-1.5">
+            <span className={`text-[10px] font-mono ${extColor(activeFile)}`}>
+              {activeFile.split("/").pop()}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden">
         {tab === "code" && (
           <div className="h-full flex">
-            {/* Line numbers */}
             <div className="select-none w-10 text-right pr-3 pt-4 pb-4 text-[11px] font-mono text-muted-foreground/40 bg-card/20 border-r border-border/30 overflow-hidden">
-              {code.split("\n").map((_, i) => (
+              {(activeContent || "").split("\n").map((_, i) => (
                 <div key={i} className="leading-[1.6rem]">{i + 1}</div>
               ))}
             </div>
             <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+              value={activeContent}
+              onChange={(e) => onContentChange(e.target.value)}
               spellCheck={false}
-              className="flex-1 resize-none bg-transparent text-[13px] font-mono leading-[1.6rem] p-4 pl-4 outline-none text-foreground caret-primary"
+              placeholder={activeFile ? "" : "← Зүүн талаас файл сонгох эсвэл агентад хэлнэ үү"}
+              className="flex-1 resize-none bg-transparent text-[13px] font-mono leading-[1.6rem] p-4 outline-none text-foreground caret-primary placeholder:text-muted-foreground/30"
               style={{ tabSize: 2 }}
             />
           </div>
@@ -310,30 +344,28 @@ function WorkspacePanel() {
                 <span className="flex-1 text-center text-[10px] font-mono text-muted-foreground">localhost:3000</span>
               </div>
               <div className="h-64 bg-[#111] flex flex-col items-center justify-center text-center p-6">
-                <h2 className="text-lg font-bold text-white mb-2">Сайн уу, kodu.live! 👋</h2>
-                <p className="text-sm text-gray-400">Таны Next.js апп бэлэн боллоо.</p>
-                <div className="mt-4 px-4 py-2 rounded-lg bg-primary/20 border border-primary/30 text-primary text-xs font-mono">
-                  ✓ Compiled successfully
-                </div>
+                <h2 className="text-lg font-bold text-white mb-2">Kodu Agent Preview</h2>
+                <p className="text-sm text-gray-400">pnpm run dev дуусгасны дараа харагдана.</p>
               </div>
             </div>
-            <p className="text-xs font-mono text-muted-foreground">Preview — Ажиллуулахын дараа харагдана</p>
+            <p className="text-xs font-mono text-muted-foreground">Агент "pnpm install && pnpm run dev" ажиллуулбал бэлэн болно</p>
           </div>
         )}
 
         {tab === "terminal" && (
-          <div className="h-full bg-[#0d0d0d] p-4 font-mono text-[12px] overflow-auto">
-            <div className="flex flex-col gap-1">
-              {TERMINAL_LINES.map((line, i) => (
+          <div ref={terminalRef} className="h-full bg-[#0d0d0d] p-4 font-mono text-[12px] overflow-auto">
+            <div className="flex flex-col gap-0.5">
+              {terminalLines.map((line, i) => (
                 <div key={i} className={
                   line.type === "cmd" ? "text-primary" :
                   line.type === "success" ? "text-green-400" :
-                  line.type === "cursor" ? "text-foreground animate-pulse" :
+                  line.type === "error" ? "text-red-400" :
                   "text-muted-foreground"
                 }>
                   {line.text}
                 </div>
               ))}
+              <div className="text-foreground animate-pulse">▋</div>
             </div>
           </div>
         )}
@@ -344,20 +376,25 @@ function WorkspacePanel() {
 
 // ── Files Panel (right) ───────────────────────────────────────────────────────
 
-function FilesPanel({ project }: { project: any }) {
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["1", "2", "6"]));
-  const [activeFile, setActiveFile] = useState<string>("3");
+type FilesPanelProps = {
+  project: any;
+  fileTree: FileEntry[];
+  activeFile: string | null;
+  onSelectFile: (path: string) => void;
+};
+
+function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelProps) {
+  const [closedDirs, setClosedDirs] = useState<Set<string>>(new Set());
   const [showKodu, setShowKodu] = useState(false);
   const [koduContent, setKoduContent] = useState(project.description || "");
-
   const updateProject = useUpdateProject();
   const queryClient = useQueryClient();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toggleFolder = (id: string) => {
-    setOpenFolders((prev) => {
+  const toggleDir = (path: string) => {
+    setClosedDirs((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(path) ? next.delete(path) : next.add(path);
       return next;
     });
   };
@@ -376,19 +413,22 @@ function FilesPanel({ project }: { project: any }) {
     }, 800);
   };
 
-  const extColor: Record<string, string> = {
-    tsx: "text-blue-400",
-    ts: "text-blue-500",
-    css: "text-pink-400",
-    json: "text-yellow-400",
-    md: "text-green-400",
+  // Check if a path is inside a collapsed directory
+  const isHidden = (path: string) => {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (closedDirs.has(parent)) return true;
+    }
+    return false;
   };
 
   return (
     <div className="flex flex-col h-full bg-[hsl(240_10%_4%)] border-l border-border">
-      {/* Header */}
       <div className="h-9 border-b border-border flex items-center justify-between px-3 shrink-0">
-        <span className="text-[10px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">Файлууд</span>
+        <span className="text-[10px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+          Файлууд {fileTree.filter(f => f.type === "file").length > 0 && `(${fileTree.filter(f => f.type === "file").length})`}
+        </span>
         <button
           onClick={() => setShowKodu(!showKodu)}
           className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
@@ -400,7 +440,6 @@ function FilesPanel({ project }: { project: any }) {
       </div>
 
       {showKodu ? (
-        /* kodu.md editor */
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 bg-card/20 shrink-0">
             <div className="flex items-center gap-1.5">
@@ -417,67 +456,57 @@ function FilesPanel({ project }: { project: any }) {
           />
         </div>
       ) : (
-        /* File tree */
         <ScrollArea className="flex-1">
           <div className="py-1">
-            {FILE_TREE.map((item) => {
-              if (item.type === "folder") {
-                const isOpen = openFolders.has(item.id);
+            {fileTree.length === 0 ? (
+              <div className="px-4 py-6 text-center text-[11px] font-mono text-muted-foreground/40">
+                Агент файл үүсгэхэд энд харагдана
+              </div>
+            ) : (
+              fileTree.map((item) => {
+                if (isHidden(item.path)) return null;
+                const depth = item.path.split("/").length - 1;
+                const name = item.path.split("/").pop() ?? item.path;
+
+                if (item.type === "dir") {
+                  const isOpen = !closedDirs.has(item.path);
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => toggleDir(item.path)}
+                      className="w-full flex items-center gap-1 py-[3px] hover:bg-accent/10 transition-colors text-left group"
+                      style={{ paddingLeft: `${8 + depth * 12}px` }}
+                    >
+                      {isOpen ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+                               : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />}
+                      <FolderIcon className="w-3.5 h-3.5 text-yellow-400/80 shrink-0" />
+                      <span className="text-[12px] font-mono text-muted-foreground group-hover:text-foreground transition-colors">
+                        {name}
+                      </span>
+                    </button>
+                  );
+                }
+
+                const isActive = activeFile === item.path;
                 return (
                   <button
-                    key={item.id}
-                    onClick={() => toggleFolder(item.id)}
-                    className="w-full flex items-center gap-1 px-2 py-[3px] hover:bg-accent/10 transition-colors text-left group"
-                    style={{ paddingLeft: `${8 + item.depth * 12}px` }}
+                    key={item.path}
+                    onClick={() => onSelectFile(item.path)}
+                    className={`w-full flex items-center gap-1.5 py-[3px] hover:bg-accent/10 transition-colors text-left ${
+                      isActive ? "bg-primary/10 border-l-2 border-primary" : ""
+                    }`}
+                    style={{ paddingLeft: `${8 + depth * 12}px` }}
                   >
-                    {isOpen ? (
-                      <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
-                    ) : (
-                      <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />
-                    )}
-                    <FolderIcon className="w-3.5 h-3.5 text-yellow-400/80 shrink-0" />
-                    <span className="text-[12px] font-mono text-muted-foreground group-hover:text-foreground transition-colors">
-                      {item.name}
+                    <FileCodeIcon className={`w-3.5 h-3.5 shrink-0 ${extColor(name)}`} />
+                    <span className={`text-[12px] font-mono transition-colors truncate ${
+                      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}>
+                      {name}
                     </span>
                   </button>
                 );
-              }
-
-              // Check if parent folder is open
-              const parentDepth = item.depth - 1;
-              if (parentDepth >= 0) {
-                const parent = FILE_TREE.find(
-                  (f) => f.type === "folder" && f.depth === parentDepth &&
-                  FILE_TREE.indexOf(f) < FILE_TREE.indexOf(item)
-                );
-                if (parent && !openFolders.has(parent.id)) return null;
-              }
-
-              const isActive = activeFile === item.id;
-              const color = extColor[item.ext ?? ""] ?? "text-muted-foreground";
-              const isKodu = item.name === "kodu.md";
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (isKodu) { setShowKodu(true); return; }
-                    setActiveFile(item.id);
-                  }}
-                  className={`w-full flex items-center gap-1.5 py-[3px] hover:bg-accent/10 transition-colors text-left ${
-                    isActive ? "bg-primary/10 border-l-2 border-primary" : ""
-                  }`}
-                  style={{ paddingLeft: `${8 + item.depth * 12}px` }}
-                >
-                  <FileCodeIcon className={`w-3.5 h-3.5 shrink-0 ${color}`} />
-                  <span className={`text-[12px] font-mono transition-colors ${
-                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}>
-                    {item.name}
-                  </span>
-                </button>
-              );
-            })}
+              })
+            )}
           </div>
         </ScrollArea>
       )}
@@ -485,9 +514,76 @@ function FilesPanel({ project }: { project: any }) {
   );
 }
 
+// ── Tool call card ────────────────────────────────────────────────────────────
+
+type ToolCallEntry = {
+  id: string;
+  tool: string;
+  input: any;
+  result?: string;
+  isError?: boolean;
+  done: boolean;
+};
+
+const TOOL_LABEL: Record<string, string> = {
+  list_files: "📂 Файлуудыг жагсаана",
+  read_file: "📖 Файл уншиж байна",
+  write_file: "✏️ Файл бичиж байна",
+  delete_file: "🗑️ Файл устгаж байна",
+  run_command: "⚡ Команд ажиллуулж байна",
+};
+
+function ToolCard({ entry }: { entry: ToolCallEntry }) {
+  const [open, setOpen] = useState(false);
+  const label = TOOL_LABEL[entry.tool] ?? `🔧 ${entry.tool}`;
+  const subtitle =
+    entry.tool === "write_file" || entry.tool === "read_file" || entry.tool === "delete_file"
+      ? entry.input?.path
+      : entry.tool === "run_command"
+      ? entry.input?.command
+      : entry.input?.path ?? "";
+
+  return (
+    <div className={`rounded-md border text-[11px] font-mono overflow-hidden transition-colors ${
+      entry.isError ? "border-red-500/30 bg-red-950/20" : entry.done ? "border-border bg-card/30" : "border-primary/30 bg-primary/5"
+    }`}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left"
+      >
+        {!entry.done ? (
+          <Loader2Icon className="w-3 h-3 text-primary animate-spin shrink-0" />
+        ) : entry.isError ? (
+          <XIcon className="w-3 h-3 text-red-400 shrink-0" />
+        ) : (
+          <CheckIcon className="w-3 h-3 text-green-400 shrink-0" />
+        )}
+        <span className="flex-1 text-foreground truncate">{label}</span>
+        {subtitle && <span className="text-muted-foreground/60 truncate max-w-[100px]">{subtitle}</span>}
+        {entry.done && (
+          open ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+               : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+        )}
+      </button>
+      {open && entry.result && (
+        <div className="px-2.5 pb-2 text-[10px] text-muted-foreground whitespace-pre-wrap border-t border-border/50 pt-1.5 max-h-32 overflow-auto">
+          {entry.result}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Chat Panel ────────────────────────────────────────────────────────────────
 
-function ChatPanel({ projectId }: { projectId: string }) {
+type ChatPanelProps = {
+  projectId: string;
+  onFileChanged: (path: string, content: string) => void;
+  onFileTree: (files: FileEntry[]) => void;
+  onTerminalLine: (line: TerminalLine) => void;
+};
+
+function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: ChatPanelProps) {
   const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
@@ -495,11 +591,14 @@ function ChatPanel({ projectId }: { projectId: string }) {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [toolCalls, setToolCalls] = useState<ToolCallEntry[]>([]);
+  const [statusMsg, setStatusMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const toolCallIdRef = useRef(0);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamText]);
+  }, [messages, streamText, toolCalls]);
 
   const handleSend = async () => {
     const content = input.trim();
@@ -507,11 +606,13 @@ function ChatPanel({ projectId }: { projectId: string }) {
     setInput("");
     setStreaming(true);
     setStreamText("");
+    setToolCalls([]);
+    setStatusMsg("Kodu бодож байна...");
 
     abortRef.current = new AbortController();
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     try {
-      const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
       const res = await fetch(`${BASE}/api/projects/${projectId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -524,6 +625,8 @@ function ChatPanel({ projectId }: { projectId: string }) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
+      // Map server-generated tool_use ids to local entry ids
+      const toolIdMap: Record<string, string> = {};
 
       while (true) {
         const { done, value } = await reader.read();
@@ -531,13 +634,68 @@ function ChatPanel({ projectId }: { projectId: string }) {
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
+
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
             const ev = JSON.parse(line.slice(6));
-            if (ev.type === "delta") setStreamText((t) => t + ev.text);
-            if (ev.type === "done") { await refetch(); setStreamText(""); }
-            if (ev.type === "error") toast({ title: "Claude алдаа", description: ev.message, variant: "destructive" });
+
+            if (ev.type === "delta") {
+              setStreamText((t) => t + ev.text);
+              setStatusMsg("");
+            }
+
+            if (ev.type === "tool_call") {
+              const localId = String(++toolCallIdRef.current);
+              toolIdMap[ev.tool + localId] = localId;
+              setStatusMsg(`${TOOL_LABEL[ev.tool] ?? ev.tool}...`);
+              setToolCalls((prev) => [
+                ...prev,
+                { id: localId, tool: ev.tool, input: ev.input, done: false },
+              ]);
+            }
+
+            if (ev.type === "tool_result") {
+              setToolCalls((prev) => {
+                // Mark the last pending entry for this tool as done
+                const idx = [...prev].reverse().findIndex(
+                  (e) => e.tool === ev.tool && !e.done
+                );
+                if (idx === -1) return prev;
+                const realIdx = prev.length - 1 - idx;
+                const updated = [...prev];
+                updated[realIdx] = {
+                  ...updated[realIdx],
+                  result: ev.result,
+                  isError: ev.isError,
+                  done: true,
+                };
+                return updated;
+              });
+              setStatusMsg("");
+              // Mirror run_command output to terminal
+              if (ev.tool === "run_command") {
+                onTerminalLine({ text: `$ ${ev.result}`, type: ev.isError ? "error" : "output" });
+              }
+            }
+
+            if (ev.type === "file_changed") {
+              onFileChanged(ev.path, ev.content);
+            }
+
+            if (ev.type === "file_tree") {
+              onFileTree(ev.files);
+            }
+
+            if (ev.type === "done") {
+              await refetch();
+              setStreamText("");
+              setStatusMsg("");
+            }
+
+            if (ev.type === "error") {
+              toast({ title: "Claude алдаа", description: ev.message, variant: "destructive" });
+            }
           } catch {}
         }
       }
@@ -547,6 +705,7 @@ function ChatPanel({ projectId }: { projectId: string }) {
       }
     } finally {
       setStreaming(false);
+      setStatusMsg("");
     }
   };
 
@@ -554,24 +713,33 @@ function ChatPanel({ projectId }: { projectId: string }) {
     abortRef.current?.abort();
     setStreaming(false);
     setStreamText("");
+    setStatusMsg("");
   };
 
   return (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1 p-3">
-        <div className="flex flex-col gap-3 pb-2">
+        <div className="flex flex-col gap-2.5 pb-2">
           {isLoading ? (
             <div className="flex justify-center pt-8">
               <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />
             </div>
-          ) : messages?.length === 0 && !streamText ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-3 text-center mt-8">
-              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <BotIcon className="w-5 h-5 text-primary" />
+          ) : messages?.length === 0 && !streamText && toolCalls.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-44 gap-3 text-center mt-4">
+              <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <BotIcon className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <p className="text-xs font-mono text-muted-foreground">Kodu Agent бэлэн.</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Даалгавраа бичнэ үү...</p>
+                <p className="text-xs font-mono font-semibold text-foreground">Kodu Agent бэлэн</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">Жишээ нь: "Todo апп хий React-аар"</p>
+              </div>
+              <div className="flex flex-col gap-1 w-full">
+                {["Landing page хий", "Login form нэм", "Dark mode нэм"].map((ex) => (
+                  <button key={ex} onClick={() => setInput(ex)}
+                    className="text-[10px] font-mono text-left px-2.5 py-1.5 rounded border border-border/50 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all text-muted-foreground">
+                    {ex}
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
@@ -579,20 +747,30 @@ function ChatPanel({ projectId }: { projectId: string }) {
               {messages?.map((msg) => (
                 <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
               ))}
-              {/* Live streaming bubble */}
+
+              {/* Live tool calls */}
+              {toolCalls.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-0.5">Kodu хийж байна</span>
+                  {toolCalls.map((tc) => <ToolCard key={tc.id} entry={tc} />)}
+                </div>
+              )}
+
+              {/* Live streaming text */}
               {streamText && (
                 <div className="flex flex-col gap-1 items-start">
                   <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">Kodu</span>
-                  <div className="max-w-[90%] rounded-lg rounded-bl-sm px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words bg-card border border-border text-foreground">
+                  <div className="max-w-[95%] rounded-lg rounded-bl-sm px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words bg-card border border-border text-foreground">
                     {streamText}
                     <span className="inline-block w-1.5 h-3.5 bg-primary/80 ml-0.5 animate-pulse align-middle" />
                   </div>
                 </div>
               )}
-              {/* Thinking indicator */}
-              {streaming && !streamText && (
+
+              {/* Thinking dots */}
+              {streaming && !streamText && toolCalls.length === 0 && (
                 <div className="flex items-center gap-2 px-1">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <BotIcon className="w-3 h-3 text-primary" />
                   </div>
                   <div className="flex gap-1">
@@ -610,40 +788,37 @@ function ChatPanel({ projectId }: { projectId: string }) {
       </ScrollArea>
 
       <div className="p-2 border-t border-border shrink-0">
-        <div className={`flex gap-2 bg-card border rounded-lg overflow-hidden transition-colors ${streaming ? "border-primary/60" : "border-border focus-within:border-primary/50"}`}>
+        {statusMsg && (
+          <p className="text-[10px] font-mono text-primary/70 mb-1 px-1 flex items-center gap-1.5">
+            <WrenchIcon className="w-2.5 h-2.5 animate-pulse" />
+            {statusMsg}
+          </p>
+        )}
+        <div className={`flex gap-2 bg-card border rounded-lg overflow-hidden transition-colors ${
+          streaming ? "border-primary/60" : "border-border focus-within:border-primary/50"
+        }`}>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
-            placeholder={streaming ? "Kodu бодож байна..." : "Kodu-д зааварч..."}
+            placeholder={streaming ? "Kodu ажиллаж байна..." : "Kodu-д зааварч... (Enter илгээх)"}
             disabled={streaming}
             className="min-h-[38px] h-[38px] max-h-[120px] resize-none border-0 rounded-none focus-visible:ring-0 py-2.5 px-3 text-[12px] font-mono bg-transparent disabled:opacity-50"
           />
           {streaming ? (
-            <Button
-              onClick={handleStop}
-              size="icon"
-              variant="ghost"
-              className="h-full rounded-none w-9 shrink-0 text-destructive hover:text-destructive"
-            >
+            <Button onClick={handleStop} size="icon" variant="ghost"
+              className="h-full rounded-none w-9 shrink-0 text-destructive hover:text-destructive">
               <span className="w-3 h-3 rounded-sm bg-destructive" />
             </Button>
           ) : (
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              size="icon"
-              className="h-full rounded-none w-9 shrink-0"
-            >
+            <Button onClick={handleSend} disabled={!input.trim()} size="icon"
+              className="h-full rounded-none w-9 shrink-0">
               <SendIcon className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
-        {streaming && (
-          <p className="text-[10px] font-mono text-primary/60 mt-1 px-1 animate-pulse">Kodu бодож байна...</p>
-        )}
       </div>
     </div>
   );
@@ -656,7 +831,7 @@ function MessageBubble({ role, content }: { role: string; content: string }) {
       <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">
         {isUser ? "Та" : "Kodu"}
       </span>
-      <div className={`max-w-[90%] rounded-lg px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words ${
+      <div className={`max-w-[95%] rounded-lg px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words ${
         isUser
           ? "bg-primary text-primary-foreground rounded-br-sm"
           : "bg-card border border-border text-foreground rounded-bl-sm"
