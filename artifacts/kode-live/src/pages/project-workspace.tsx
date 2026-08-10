@@ -16,7 +16,7 @@ import {
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
   DownloadIcon, FolderPlusIcon, FilePlusIcon, ExternalLinkIcon,
-  SparklesIcon, CornerDownLeftIcon, StopCircleIcon, ImageIcon, XCircleIcon,
+  SparklesIcon, CornerDownLeftIcon, StopCircleIcon, ImageIcon, XCircleIcon, CoinsIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -95,6 +95,15 @@ export default function ProjectWorkspace() {
   const [, setLocation] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const queryClient = useQueryClient();
+  const [credits, setCredits] = useState<number | null>(null);
+
+  // Fetch credits on mount
+  useEffect(() => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/credits`).then(r => r.json()).then(d => {
+      if (typeof d.credits === "number") setCredits(d.credits);
+    }).catch(() => {});
+  }, []);
 
   // ── Shared editor state ─────────────────────────────────────────────────────
   const [fileTree, setFileTree] = useState<FileEntry[]>([]);
@@ -195,11 +204,20 @@ export default function ProjectWorkspace() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <Button size="sm" className="h-7 gap-1.5 text-xs font-mono px-3">
-            <PlayIcon className="w-3 h-3" />
-            Ажиллуулах
-          </Button>
+        <div className="flex items-center gap-1.5">
+          {/* Credits badge */}
+          {credits !== null && (
+            <Link href="/pricing">
+              <button className={`flex items-center gap-1 px-2 py-1 rounded-md border font-mono text-[10px] font-semibold transition-all ${
+                credits < 10
+                  ? "border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20"
+                  : "border-border/50 bg-card text-muted-foreground hover:text-foreground hover:border-border"
+              }`}>
+                <CoinsIcon className="w-2.5 h-2.5" />
+                {credits}кр
+              </button>
+            </Link>
+          )}
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs font-mono px-3" onClick={fetchFileTree}>
             <RefreshCwIcon className="w-3 h-3" />
             Шинэчлэх
@@ -240,6 +258,7 @@ export default function ProjectWorkspace() {
               onFileChanged={handleFileChanged}
               onFileTree={handleFileTree}
               onTerminalLine={handleTerminalLine}
+              onCreditsUsed={(cost) => setCredits((c) => (c !== null ? Math.max(0, c - cost) : null))}
             />
           </ResizablePanel>
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
@@ -277,9 +296,10 @@ type AgentPanelProps = {
   onFileChanged: (path: string, content: string) => void;
   onFileTree: (files: FileEntry[]) => void;
   onTerminalLine: (line: TerminalLine) => void;
+  onCreditsUsed?: (cost: number) => void;
 };
 
-function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalLine }: AgentPanelProps) {
+function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed }: AgentPanelProps) {
   const [tab, setTab] = useState<AgentTab>("agent");
 
   return (
@@ -295,6 +315,7 @@ function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalL
             onFileChanged={onFileChanged}
             onFileTree={onFileTree}
             onTerminalLine={onTerminalLine}
+            onCreditsUsed={onCreditsUsed}
           />
         ) : (
           <PlannerPanel projectId={projectId} />
@@ -1122,9 +1143,10 @@ type ChatPanelProps = {
   onFileChanged: (path: string, content: string) => void;
   onFileTree: (files: FileEntry[]) => void;
   onTerminalLine: (line: TerminalLine) => void;
+  onCreditsUsed?: (cost: number) => void;
 };
 
-function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: ChatPanelProps) {
+function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed }: ChatPanelProps) {
   const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
@@ -1204,6 +1226,11 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
         signal: abortRef.current.signal,
       });
 
+      if (res.status === 402) {
+        const data = await res.json();
+        toast({ title: "💰 Кредит хүрэлцэхгүй", description: `${data.available ?? 0}кр байна, ${data.required ?? 0}кр хэрэгтэй. Кредит нэмнэ үү.`, variant: "destructive" });
+        setStreaming(false); setStatusMsg(""); return;
+      }
       if (!res.ok || !res.body) throw new Error("Сервертэй холбогдож чадсангүй");
 
       const reader = res.body.getReader();
@@ -1271,6 +1298,10 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
               onFileTree(ev.files);
             }
 
+            if (ev.type === "credits_used") {
+              onCreditsUsed?.(ev.cost);
+            }
+
             if (ev.type === "done") {
               await refetch();
               setStreamText("");
@@ -1278,7 +1309,11 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
             }
 
             if (ev.type === "error") {
-              toast({ title: "Claude алдаа", description: ev.message, variant: "destructive" });
+              if (ev.message?.includes("INSUFFICIENT_CREDITS") || ev.message?.includes("Кредит")) {
+                toast({ title: "💰 Кредит хүрэлцэхгүй", description: "Кредит нэмэхийн тулд /pricing руу орно уу", variant: "destructive" });
+              } else {
+                toast({ title: "Claude алдаа", description: ev.message, variant: "destructive" });
+              }
             }
           } catch {}
         }

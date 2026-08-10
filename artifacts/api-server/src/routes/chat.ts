@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { requireCredits, deductCredits, creditCost } from "./credits";
 
 const router: IRouter = Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -306,7 +307,7 @@ Progress, ScrollArea, Resizable
 
 // ── POST /api/projects/:id/chat ───────────────────────────────────────────────
 
-router.post("/projects/:id/chat", async (req, res): Promise<void> => {
+router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void> => {
   const { id } = req.params;
   const { content, model, maxTokens, images } = req.body;
   // images: { mediaType: string; data: string }[] — base64 only, no data URI prefix
@@ -431,6 +432,13 @@ router.post("/projects/:id/chat", async (req, res): Promise<void> => {
       await db.insert(messagesTable).values({
         projectId: id, role: "assistant", content: fullText,
       });
+    }
+
+    // Deduct credits after successful completion
+    if ((req as any).user?.id) {
+      await deductCredits((req as any).user.id, model ?? "claude-sonnet-4-5").catch(() => {});
+      // Send updated credit balance to client
+      send({ type: "credits_used", cost: creditCost(model ?? "claude-sonnet-4-5") });
     }
 
     send({ type: "done" });
