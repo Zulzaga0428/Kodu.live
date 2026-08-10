@@ -443,6 +443,9 @@ router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void
       messages.push({ role: "assistant", content: response.content });
 
       if (response.stop_reason === "end_turn") break;
+      // max_tokens or any unknown stop reason: exit loop to avoid sending
+      // tool_use blocks without corresponding tool_result (Anthropic 400 error)
+      if (response.stop_reason !== "tool_use") break;
 
       if (response.stop_reason === "tool_use") {
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
