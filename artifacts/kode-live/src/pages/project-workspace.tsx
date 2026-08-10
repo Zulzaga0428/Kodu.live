@@ -125,6 +125,7 @@ export default function ProjectWorkspace() {
   useEffect(() => { fetchFileTree(); }, [fetchFileTree]);
 
   const [fileWriteCount, setFileWriteCount] = useState(0);
+  const [agentHasBuilt, setAgentHasBuilt] = useState(false);
 
   // Called by ChatPanel when agent writes/deletes a file
   const handleFileChanged = useCallback((path: string, content: string) => {
@@ -259,6 +260,7 @@ export default function ProjectWorkspace() {
               onFileTree={handleFileTree}
               onTerminalLine={handleTerminalLine}
               onCreditsUsed={(cost) => setCredits((c) => (c !== null ? Math.max(0, c - cost) : null))}
+              onBuildComplete={() => setAgentHasBuilt(true)}
             />
           </ResizablePanel>
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
@@ -270,6 +272,7 @@ export default function ProjectWorkspace() {
               onContentChange={setActiveContent}
               terminalLines={terminalLines}
               fileWriteCount={fileWriteCount}
+              agentHasBuilt={agentHasBuilt}
             />
           </ResizablePanel>
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
@@ -297,9 +300,10 @@ type AgentPanelProps = {
   onFileTree: (files: FileEntry[]) => void;
   onTerminalLine: (line: TerminalLine) => void;
   onCreditsUsed?: (cost: number) => void;
+  onBuildComplete?: () => void;
 };
 
-function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed }: AgentPanelProps) {
+function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed, onBuildComplete }: AgentPanelProps) {
   const [tab, setTab] = useState<AgentTab>("agent");
 
   return (
@@ -316,6 +320,7 @@ function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalL
             onFileTree={onFileTree}
             onTerminalLine={onTerminalLine}
             onCreditsUsed={onCreditsUsed}
+            onBuildComplete={onBuildComplete}
           />
         ) : (
           <PlannerPanel projectId={projectId} />
@@ -334,6 +339,7 @@ type WorkspacePanelProps = {
   onContentChange: (c: string) => void;
   terminalLines: TerminalLine[];
   fileWriteCount: number;
+  agentHasBuilt: boolean;
 };
 
 // Monaco editor wrapped with settings
@@ -381,12 +387,27 @@ interface PreviewState {
   buildLogs?: string;
 }
 
-function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange, terminalLines, fileWriteCount }: WorkspacePanelProps) {
+function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange, terminalLines, fileWriteCount, agentHasBuilt }: WorkspacePanelProps) {
   const [tab, setTab] = useState<WorkspaceTab>("code");
   const terminalRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<PreviewState>({ status: "idle" });
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const didAutoPreview = useRef(false);
+
+  // ── Auto-switch to preview tab when agent finishes first build ────────────
+  useEffect(() => {
+    if (!agentHasBuilt || didAutoPreview.current) return;
+    didAutoPreview.current = true;
+    setTab("preview");
+    // Small delay so file writes settle before container spins up
+    setTimeout(() => {
+      setPreview((p) => {
+        if (p.status === "idle") { createPreview(); }
+        return p;
+      });
+    }, 800);
+  }, [agentHasBuilt]);
 
   // ── Auto hot-reload preview when agent writes files ────────────────────────
   useEffect(() => {
@@ -455,7 +476,8 @@ function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange,
   // ── Auto-create when switching to preview tab ─────────────────────────────
   const handleTabChange = (t: WorkspaceTab) => {
     setTab(t);
-    if (t === "preview" && preview.status === "idle") createPreview();
+    // Only start the preview container if the agent has actually built something
+    if (t === "preview" && preview.status === "idle" && agentHasBuilt) createPreview();
   };
 
   useEffect(() => {
@@ -611,18 +633,36 @@ function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange,
               {/* IDLE */}
               {preview.status === "idle" && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
-                  <MonitorIcon className="w-10 h-10 text-zinc-700" />
-                  <div className="text-center space-y-1">
-                    <p className="text-sm font-medium text-zinc-300">Live Preview</p>
-                    <p className="text-xs text-zinc-600">Төслийн кодыг бодит хэлбэрт харуулна.</p>
-                  </div>
-                  <button
-                    onClick={createPreview}
-                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition flex items-center gap-2"
-                  >
-                    <PlayIcon className="w-3.5 h-3.5" />
-                    Preview эхлүүлэх
-                  </button>
+                  {!agentHasBuilt ? (
+                    <>
+                      <div className="relative w-12 h-12">
+                        <div className="absolute inset-0 rounded-full border-2 border-primary/10" />
+                        <div className="absolute inset-0 rounded-full border-t-2 border-primary/40 animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <SparklesIcon className="w-5 h-5 text-primary/50" />
+                        </div>
+                      </div>
+                      <div className="text-center space-y-1">
+                        <p className="text-sm font-medium text-zinc-300">Агент код бичиж байна...</p>
+                        <p className="text-xs text-zinc-600">Дуусангуут preview автоматаар нээгдэнэ.</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <MonitorIcon className="w-10 h-10 text-zinc-700" />
+                      <div className="text-center space-y-1">
+                        <p className="text-sm font-medium text-zinc-300">Live Preview</p>
+                        <p className="text-xs text-zinc-600">Төслийн кодыг бодит хэлбэрт харуулна.</p>
+                      </div>
+                      <button
+                        onClick={createPreview}
+                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition flex items-center gap-2"
+                      >
+                        <PlayIcon className="w-3.5 h-3.5" />
+                        Preview эхлүүлэх
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1144,9 +1184,10 @@ type ChatPanelProps = {
   onFileTree: (files: FileEntry[]) => void;
   onTerminalLine: (line: TerminalLine) => void;
   onCreditsUsed?: (cost: number) => void;
+  onBuildComplete?: () => void;
 };
 
-function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed }: ChatPanelProps) {
+function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCreditsUsed, onBuildComplete }: ChatPanelProps) {
   const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
@@ -1313,6 +1354,10 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
               await refetch();
               setStreamText("");
               setStatusMsg("");
+              // Notify parent that a real build (not clarify) finished
+              if (!clarifyMode) {
+                onBuildComplete?.();
+              }
             }
 
             if (ev.type === "error") {
