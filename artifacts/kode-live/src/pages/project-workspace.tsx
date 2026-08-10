@@ -488,25 +488,72 @@ function FilesPanel({ project }: { project: any }) {
 // ── Chat Panel ────────────────────────────────────────────────────────────────
 
 function ChatPanel({ projectId }: { projectId: string }) {
-  const { data: messages, isLoading } = useListMessages(projectId, {
+  const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
-  const createMessage = useCreateMessage();
-  const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streamText]);
 
-  const handleSend = () => {
-    if (!input.trim() || createMessage.isPending) return;
-    const content = input;
+  const handleSend = async () => {
+    const content = input.trim();
+    if (!content || streaming) return;
     setInput("");
-    createMessage.mutate({ id: projectId, data: { role: MessageRole.user, content } }, {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListMessagesQueryKey(projectId) }),
-    });
+    setStreaming(true);
+    setStreamText("");
+
+    abortRef.current = new AbortController();
+
+    try {
+      const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${BASE}/api/projects/${projectId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok || !res.body) throw new Error("Сервертэй холбогдож чадсангүй");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.type === "delta") setStreamText((t) => t + ev.text);
+            if (ev.type === "done") { await refetch(); setStreamText(""); }
+            if (ev.type === "error") toast({ title: "Claude алдаа", description: ev.message, variant: "destructive" });
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        toast({ title: "Алдаа гарлаа", description: String(err.message), variant: "destructive" });
+      }
+    } finally {
+      setStreaming(false);
+    }
+  };
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setStreaming(false);
+    setStreamText("");
   };
 
   return (
@@ -517,7 +564,7 @@ function ChatPanel({ projectId }: { projectId: string }) {
             <div className="flex justify-center pt-8">
               <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />
             </div>
-          ) : messages?.length === 0 ? (
+          ) : messages?.length === 0 && !streamText ? (
             <div className="flex flex-col items-center justify-center h-40 gap-3 text-center mt-8">
               <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
                 <BotIcon className="w-5 h-5 text-primary" />
@@ -528,58 +575,93 @@ function ChatPanel({ projectId }: { projectId: string }) {
               </div>
             </div>
           ) : (
-            messages?.map((msg) => (
-              <div key={msg.id} className={`flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">
-                  {msg.role === "user" ? "Та" : "Kodu"}
-                </span>
-                <div className={`max-w-[90%] rounded-lg px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-sm"
-                    : "bg-card border border-border text-foreground rounded-bl-sm"
-                }`}>
-                  {msg.content}
+            <>
+              {messages?.map((msg) => (
+                <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
+              ))}
+              {/* Live streaming bubble */}
+              {streamText && (
+                <div className="flex flex-col gap-1 items-start">
+                  <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">Kodu</span>
+                  <div className="max-w-[90%] rounded-lg rounded-bl-sm px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words bg-card border border-border text-foreground">
+                    {streamText}
+                    <span className="inline-block w-1.5 h-3.5 bg-primary/80 ml-0.5 animate-pulse align-middle" />
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-          {createMessage.isPending && (
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <BotIcon className="w-3 h-3 text-primary" />
-              </div>
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-              </div>
-            </div>
+              )}
+              {/* Thinking indicator */}
+              {streaming && !streamText && (
+                <div className="flex items-center gap-2 px-1">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <BotIcon className="w-3 h-3 text-primary" />
+                  </div>
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+                        style={{ animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
           <div ref={scrollRef} />
         </div>
       </ScrollArea>
 
       <div className="p-2 border-t border-border shrink-0">
-        <div className="flex gap-2 bg-card border border-border rounded-lg overflow-hidden focus-within:border-primary/50 transition-colors">
+        <div className={`flex gap-2 bg-card border rounded-lg overflow-hidden transition-colors ${streaming ? "border-primary/60" : "border-border focus-within:border-primary/50"}`}>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
             }}
-            placeholder="Kodu-д зааварч..."
-            className="min-h-[38px] h-[38px] max-h-[120px] resize-none border-0 rounded-none focus-visible:ring-0 py-2.5 px-3 text-[12px] font-mono bg-transparent"
+            placeholder={streaming ? "Kodu бодож байна..." : "Kodu-д зааварч..."}
+            disabled={streaming}
+            className="min-h-[38px] h-[38px] max-h-[120px] resize-none border-0 rounded-none focus-visible:ring-0 py-2.5 px-3 text-[12px] font-mono bg-transparent disabled:opacity-50"
           />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || createMessage.isPending}
-            size="icon"
-            className="h-full rounded-none w-9 shrink-0"
-          >
-            <SendIcon className="w-3.5 h-3.5" />
-          </Button>
+          {streaming ? (
+            <Button
+              onClick={handleStop}
+              size="icon"
+              variant="ghost"
+              className="h-full rounded-none w-9 shrink-0 text-destructive hover:text-destructive"
+            >
+              <span className="w-3 h-3 rounded-sm bg-destructive" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              size="icon"
+              className="h-full rounded-none w-9 shrink-0"
+            >
+              <SendIcon className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
+        {streaming && (
+          <p className="text-[10px] font-mono text-primary/60 mt-1 px-1 animate-pulse">Kodu бодож байна...</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ role, content }: { role: string; content: string }) {
+  const isUser = role === "user";
+  return (
+    <div className={`flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
+      <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">
+        {isUser ? "Та" : "Kodu"}
+      </span>
+      <div className={`max-w-[90%] rounded-lg px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words ${
+        isUser
+          ? "bg-primary text-primary-foreground rounded-br-sm"
+          : "bg-card border border-border text-foreground rounded-bl-sm"
+      }`}>
+        {content}
       </div>
     </div>
   );
