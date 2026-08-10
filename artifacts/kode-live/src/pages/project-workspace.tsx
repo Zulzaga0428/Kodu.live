@@ -1754,14 +1754,14 @@ function TabBtn({ active, onClick, icon, label }: {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 h-9 text-[11px] font-mono border-b-2 transition-colors ${
+      className={`flex-1 flex items-center justify-center gap-1.5 px-2 h-9 text-[11px] font-mono border-b-2 transition-colors min-w-0 ${
         active
           ? "border-primary text-foreground bg-card/30"
           : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/5"
       }`}
     >
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
     </button>
   );
 }
