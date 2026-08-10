@@ -16,7 +16,7 @@ import {
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
   DownloadIcon, FolderPlusIcon, FilePlusIcon, ExternalLinkIcon,
-  SparklesIcon, CornerDownLeftIcon, StopCircleIcon,
+  SparklesIcon, CornerDownLeftIcon, StopCircleIcon, ImageIcon, XCircleIcon, ChevronDownIcon as ChevronDown,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -1128,7 +1128,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
   const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
-  const { settings: agentSettings } = useSettings();
+  const { settings: agentSettings, setSettings } = useSettings();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -1138,6 +1138,27 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
   const abortRef = useRef<AbortController | null>(null);
   const toolCallIdRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedImages, setAttachedImages] = useState<{ name: string; dataUrl: string; mediaType: string }[]>([]);
+
+  const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    files.forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedImages((prev) => [
+          ...prev,
+          { name: file.name, dataUrl: reader.result as string, mediaType: file.type },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  };
+
+  const removeImage = (idx: number) =>
+    setAttachedImages((prev) => prev.filter((_, i) => i !== idx));
 
   // Auto-resize textarea as user types
   useEffect(() => {
@@ -1160,6 +1181,13 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
     setToolCalls([]);
     setStatusMsg("Kodu бодож байна...");
 
+    // Encode attached images → strip data URI prefix, keep base64 only
+    const imagePayload = attachedImages.map((img) => ({
+      mediaType: img.mediaType,
+      data: img.dataUrl.split(",")[1] ?? "",
+    }));
+    setAttachedImages([]);
+
     abortRef.current = new AbortController();
     const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1167,7 +1195,12 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
       const res = await fetch(`${BASE}/api/projects/${projectId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, model: agentSettings.model, maxTokens: agentSettings.maxTokens }),
+        body: JSON.stringify({
+          content,
+          model: agentSettings.model,
+          maxTokens: agentSettings.maxTokens,
+          images: imagePayload.length > 0 ? imagePayload : undefined,
+        }),
         signal: abortRef.current.signal,
       });
 
@@ -1367,6 +1400,28 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
             : "border-border/60 bg-card focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.06)]"
         }`}>
 
+          {/* Image thumbnails */}
+          {attachedImages.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+              {attachedImages.map((img, i) => (
+                <div key={i} className="relative group">
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    className="h-14 w-14 object-cover rounded-lg border border-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <XCircleIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -1382,21 +1437,84 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
           />
 
           {/* Bottom bar */}
-          <div className="flex items-center justify-between px-2.5 pb-2 gap-2">
-            {/* Left: model badge */}
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/8 border border-primary/15 text-primary/70">
-                <SparklesIcon className="w-2.5 h-2.5" />
-                <span className="text-[9px] font-mono font-medium">
-                  {agentSettings.model.includes("sonnet") ? "Sonnet" : agentSettings.model.includes("haiku") ? "Haiku" : agentSettings.model.includes("opus") ? "Opus" : "Claude"}
-                </span>
-              </div>
-              {!streaming && input.length > 0 && (
-                <span className="text-[9px] font-mono text-muted-foreground/40">{input.length} тэмдэгт</span>
-              )}
+          <div className="flex items-center justify-between px-2 pb-2 gap-2">
+
+            {/* Left: model speed dropdown + image upload */}
+            <div className="flex items-center gap-1">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImagePick}
+              />
+
+              {/* Image attach button */}
+              <button
+                type="button"
+                disabled={streaming}
+                onClick={() => fileInputRef.current?.click()}
+                title="Зураг хавсаргах"
+                className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground/50 hover:text-primary hover:bg-primary/8 disabled:opacity-30 transition-all"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Fast / Smart / Deep dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={streaming}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/8 border border-primary/15 text-primary/80 hover:bg-primary/15 disabled:opacity-40 transition-all"
+                  >
+                    <span className="text-[9px] font-mono font-semibold">
+                      {agentSettings.model.includes("haiku") ? "⚡ Fast" : agentSettings.model.includes("opus") ? "🔬 Deep" : "🧠 Smart"}
+                    </span>
+                    <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[160px] font-mono text-xs">
+                  <DropdownMenuItem
+                    onClick={() => setSettings({ model: "claude-haiku-4-5" })}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <span className="text-base">⚡</span>
+                    <div>
+                      <p className="font-semibold text-[11px]">Fast</p>
+                      <p className="text-[9px] text-muted-foreground">Хурдан, хялбар даалгавар</p>
+                    </div>
+                    {agentSettings.model.includes("haiku") && <CheckIcon className="w-3 h-3 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setSettings({ model: "claude-sonnet-4-5" })}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <span className="text-base">🧠</span>
+                    <div>
+                      <p className="font-semibold text-[11px]">Smart</p>
+                      <p className="text-[9px] text-muted-foreground">Тэнцвэртэй, ерөнхий зорилго</p>
+                    </div>
+                    {agentSettings.model.includes("sonnet") && <CheckIcon className="w-3 h-3 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setSettings({ model: "claude-opus-4-5" })}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <span className="text-base">🔬</span>
+                    <div>
+                      <p className="font-semibold text-[11px]">Deep</p>
+                      <p className="text-[9px] text-muted-foreground">Хамгийн ухаалаг, нарийн</p>
+                    </div>
+                    {agentSettings.model.includes("opus") && <CheckIcon className="w-3 h-3 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
-            {/* Right: hint + button */}
+            {/* Right: keyboard hint + send/stop */}
             <div className="flex items-center gap-2">
               {!streaming && (
                 <span className="text-[9px] font-mono text-muted-foreground/30 hidden sm:flex items-center gap-0.5">
@@ -1414,7 +1532,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
               ) : (
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim()}
+                  disabled={!input.trim() && attachedImages.length === 0}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed text-primary-foreground transition-all text-[10px] font-mono font-medium shadow-sm"
                 >
                   <SendIcon className="w-2.5 h-2.5" />

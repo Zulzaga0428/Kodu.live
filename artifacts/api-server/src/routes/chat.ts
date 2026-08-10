@@ -308,7 +308,8 @@ Progress, ScrollArea, Resizable
 
 router.post("/projects/:id/chat", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const { content, model, maxTokens } = req.body;
+  const { content, model, maxTokens, images } = req.body;
+  // images: { mediaType: string; data: string }[] — base64 only, no data URI prefix
 
   if (!content?.trim()) {
     res.status(400).json({ error: "content шаардлагатай" });
@@ -321,14 +322,16 @@ router.post("/projects/:id/chat", async (req, res): Promise<void> => {
 
   await initProjectDir(id, project.name);
 
-  await db.insert(messagesTable).values({
-    projectId: id, role: "user", content: content.trim(),
-  });
-
+  // Load history BEFORE inserting so we can append the image-aware message ourselves
   const history = await db.select().from(messagesTable)
     .where(eq(messagesTable.projectId, id))
     .orderBy(asc(messagesTable.createdAt))
-    .limit(40);
+    .limit(39);
+
+  // Save text-only version to DB
+  await db.insert(messagesTable).values({
+    projectId: id, role: "user", content: content.trim(),
+  });
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -342,6 +345,24 @@ router.post("/projects/:id/chat", async (req, res): Promise<void> => {
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
+
+  // Build current user message — with optional images
+  const hasImages = Array.isArray(images) && images.length > 0;
+  const userContent: Anthropic.ContentBlockParam[] = hasImages
+    ? [
+        ...images.map((img: { mediaType: string; data: string }) => ({
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: img.data,
+          },
+        })),
+        { type: "text" as const, text: content.trim() },
+      ]
+    : [{ type: "text" as const, text: content.trim() }];
+
+  messages.push({ role: "user", content: userContent });
 
   let fullText = "";
 
