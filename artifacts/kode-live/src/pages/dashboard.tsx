@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +22,7 @@ import {
   PlusIcon, TerminalSquareIcon, CheckCircle2Icon, ArchiveIcon,
   MessageSquareIcon, LayoutListIcon, Loader2Icon, FolderIcon,
   ZapIcon, SettingsIcon, SearchIcon, GridIcon, ListIcon,
-  ChevronRightIcon, ClockIcon, TrendingUpIcon,
+  ChevronRightIcon, ClockIcon, TrendingUpIcon, LogOutIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -142,17 +143,7 @@ export default function Dashboard() {
         </nav>
 
         {/* User section */}
-        <div className="p-3 border-t border-border/50">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent/10 cursor-pointer transition-colors">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shrink-0">
-              <span className="text-[10px] font-bold text-white">МХ</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono font-semibold truncate">Хөгжүүлэгч</p>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">dev@kodu.live</p>
-            </div>
-          </div>
-        </div>
+        <UserSection />
       </aside>
 
       {/* ── Main content ── */}
@@ -461,6 +452,62 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       <Button onClick={onNew} variant="outline" size="sm" className="font-mono text-xs gap-1.5">
         <PlusIcon className="w-3.5 h-3.5" /> Шинэ төсөл
       </Button>
+    </div>
+  );
+}
+
+// ── User section (sidebar bottom) ─────────────────────────────────────────────
+function UserSection() {
+  const { user, loading, logout } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="p-3 border-t border-border/50">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <div className="w-7 h-7 rounded-full bg-muted animate-pulse shrink-0" />
+          <div className="flex-1 space-y-1">
+            <div className="h-2.5 bg-muted rounded animate-pulse w-20" />
+            <div className="h-2 bg-muted rounded animate-pulse w-28" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-3 border-t border-border/50">
+        <a href="/login" className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-accent/10 transition-colors text-xs font-mono text-muted-foreground hover:text-foreground">
+          Нэвтрэх →
+        </a>
+      </div>
+    );
+  }
+
+  const initials = user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="p-3 border-t border-border/50">
+      <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg group">
+        {user.avatar ? (
+          <img src={user.avatar} alt={user.name} className="w-7 h-7 rounded-full shrink-0 object-cover" />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-white">{initials}</span>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-mono font-semibold truncate">{user.name}</p>
+          <p className="text-[10px] text-muted-foreground font-mono truncate">{user.email}</p>
+        </div>
+        <button
+          onClick={logout}
+          title="Гарах"
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-500/10 hover:text-red-400 text-muted-foreground"
+        >
+          <LogOutIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

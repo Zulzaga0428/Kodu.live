@@ -7,6 +7,7 @@ import NotFound from '@/pages/not-found';
 import Home from '@/pages/home';
 import Dashboard from '@/pages/dashboard';
 import ProjectWorkspace from '@/pages/project-workspace';
+import LoginPage from '@/pages/login';
 
 import {
   Route,
@@ -22,6 +23,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/login" component={LoginPage} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/projects/:id" component={ProjectWorkspace} />
         <Route component={NotFound} />
