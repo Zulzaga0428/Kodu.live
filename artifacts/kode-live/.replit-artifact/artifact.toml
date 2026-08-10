@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "kode.live"
+description = "kode.live — Монгол хөгжүүлэгчдэд зориулсан AI-тай кодлох платформ. Хэрэглэгч төсөл үүсгэж, AI-д даалгавар өгч, Planner-ээр алхамуудад хуваагаад Next.js fullstack апп хийж чадна. Dashboard, AI chat, Planner, Brain (history), kodu.md дэмжлэгтэй."
+version = "1.0.0"
+id = "artifacts/kode-live"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24767
+
+[services.development]
+run = "pnpm --filter @workspace/kode-live run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kode-live", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/kode-live/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24767"
+BASE_PATH = "/"
