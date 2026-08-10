@@ -49,11 +49,28 @@ function save(s: AppSettings) {
 // Global listeners so multiple components update when settings change
 const listeners = new Set<() => void>();
 
+function applyTheme(theme: string) {
+  const root = document.documentElement;
+  if (theme === "light") {
+    root.classList.remove("dark");
+  } else {
+    root.classList.add("dark");
+  }
+}
+
 export function useSettings() {
-  const [settings, setSettingsState] = useState<AppSettings>(load);
+  const [settings, setSettingsState] = useState<AppSettings>(() => {
+    const s = load();
+    applyTheme(s.theme);
+    return s;
+  });
 
   useEffect(() => {
-    const notify = () => setSettingsState(load());
+    const notify = () => {
+      const s = load();
+      applyTheme(s.theme);
+      setSettingsState(s);
+    };
     listeners.add(notify);
     return () => { listeners.delete(notify); };
   }, []);
@@ -61,6 +78,7 @@ export function useSettings() {
   const setSettings = (update: Partial<AppSettings>) => {
     const next = { ...settings, ...update };
     save(next);
+    if (update.theme) applyTheme(update.theme);
     setSettingsState(next);
     listeners.forEach((fn) => fn());
   };
