@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import archiver from "archiver";
 
 const router: IRouter = Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -337,6 +338,94 @@ router.get("/projects/:id/file", async (req, res): Promise<void> => {
   } catch {
     res.status(404).json({ error: "Файл олдсонгүй" });
   }
+});
+
+// ── POST /api/projects/:id/file — create file or folder ──────────────────────
+
+router.post("/projects/:id/file", async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const { path: filePath, content = "", isDir = false } = req.body ?? {};
+  if (!filePath) { res.status(400).json({ error: "path шаардлагатай" }); return; }
+  try {
+    const p = safePath(id, filePath);
+    if (isDir) {
+      await fs.mkdir(p, { recursive: true });
+    } else {
+      await fs.mkdir(path.dirname(p), { recursive: true });
+      await fs.writeFile(p, content, "utf8");
+    }
+    const files = await walkDir(projectDir(id));
+    res.json({ ok: true, files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/projects/:id/file?path=... — delete file or folder ───────────
+
+router.delete("/projects/:id/file", async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const filePath = (req.query.path as string) ?? "";
+  if (!filePath) { res.status(400).json({ error: "path шаардлагатай" }); return; }
+  try {
+    const p = safePath(id, filePath);
+    const stat = await fs.stat(p);
+    if (stat.isDirectory()) {
+      await fs.rm(p, { recursive: true, force: true });
+    } else {
+      await fs.unlink(p);
+    }
+    const files = await walkDir(projectDir(id));
+    res.json({ ok: true, files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /api/projects/:id/file — rename/move file ─────────────────────────
+
+router.patch("/projects/:id/file", async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const { oldPath, newPath } = req.body ?? {};
+  if (!oldPath || !newPath) { res.status(400).json({ error: "oldPath, newPath шаардлагатай" }); return; }
+  try {
+    const src = safePath(id, oldPath);
+    const dst = safePath(id, newPath);
+    await fs.mkdir(path.dirname(dst), { recursive: true });
+    await fs.rename(src, dst);
+    const files = await walkDir(projectDir(id));
+    res.json({ ok: true, files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/projects/:id/download — ZIP the whole project ───────────────────
+
+router.get("/projects/:id/download", async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const dir = projectDir(id);
+  try {
+    await fs.access(dir);
+  } catch {
+    res.status(404).json({ error: "Төсөл олдсонгүй" }); return;
+  }
+
+  // Get project name from DB for filename
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+  const filename = (project?.name ?? "project").replace(/[^a-zA-Z0-9-_]/g, "_");
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}.zip"`);
+
+  const archive = archiver("zip", { zlib: { level: 6 } });
+  archive.on("error", (err) => { if (!res.headersSent) res.status(500).end(); });
+  archive.pipe(res);
+  archive.glob("**/*", {
+    cwd: dir,
+    ignore: ["node_modules/**", ".next/**", ".git/**", "dist/**"],
+  });
+  await archive.finalize();
 });
 
 export default router;

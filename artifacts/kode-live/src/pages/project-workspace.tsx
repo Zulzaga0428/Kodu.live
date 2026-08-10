@@ -14,6 +14,7 @@ import {
   FolderIcon, FileTextIcon, ChevronRightIcon, ChevronDownIcon,
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
+  DownloadIcon, FolderPlusIcon, FilePlusIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -252,6 +253,7 @@ export default function ProjectWorkspace() {
               fileTree={fileTree}
               activeFile={activeFile}
               onSelectFile={handleSelectFile}
+              onFileTreeChange={handleFileTree}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -420,15 +422,24 @@ type FilesPanelProps = {
   fileTree: FileEntry[];
   activeFile: string | null;
   onSelectFile: (path: string) => void;
+  onFileTreeChange: (files: FileEntry[]) => void;
 };
 
-function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelProps) {
+function FilesPanel({ project, fileTree, activeFile, onSelectFile, onFileTreeChange }: FilesPanelProps) {
   const [closedDirs, setClosedDirs] = useState<Set<string>>(new Set());
   const [showKodu, setShowKodu] = useState(false);
   const [koduContent, setKoduContent] = useState(project.description || "");
+  const [creating, setCreating] = useState<"file" | "folder" | null>(null);
+  const [newName, setNewName] = useState("");
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
   const updateProject = useUpdateProject();
   const queryClient = useQueryClient();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const createInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const toggleDir = (path: string) => {
     setClosedDirs((prev) => {
@@ -452,7 +463,6 @@ function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelP
     }, 800);
   };
 
-  // Check if a path is inside a collapsed directory
   const isHidden = (path: string) => {
     const parts = path.split("/");
     for (let i = 1; i < parts.length; i++) {
@@ -462,20 +472,111 @@ function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelP
     return false;
   };
 
+  // Focus input when create mode opens
+  useEffect(() => {
+    if (creating) setTimeout(() => createInputRef.current?.focus(), 50);
+  }, [creating]);
+
+  useEffect(() => {
+    if (renamingPath) setTimeout(() => renameInputRef.current?.select(), 50);
+  }, [renamingPath]);
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) { setCreating(null); setNewName(""); return; }
+    const isDir = creating === "folder";
+    try {
+      const res = await fetch(`${BASE}/api/projects/${project.id}/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: name, isDir }),
+      });
+      const data = await res.json();
+      if (data.files) onFileTreeChange(data.files);
+      if (!isDir) onSelectFile(name);
+    } catch {}
+    setCreating(null); setNewName("");
+  };
+
+  const handleDelete = async (filePath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`"${filePath.split("/").pop()}" устгах уу?`)) return;
+    setDeletingPath(filePath);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${project.id}/file?path=${encodeURIComponent(filePath)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.files) onFileTreeChange(data.files);
+    } catch {}
+    setDeletingPath(null);
+  };
+
+  const handleRenameStart = (filePath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingPath(filePath);
+    setRenameName(filePath.split("/").pop() ?? "");
+  };
+
+  const handleRenameCommit = async () => {
+    if (!renamingPath || !renameName.trim()) { setRenamingPath(null); return; }
+    const parts = renamingPath.split("/");
+    parts[parts.length - 1] = renameName.trim();
+    const newPath = parts.join("/");
+    if (newPath === renamingPath) { setRenamingPath(null); return; }
+    try {
+      const res = await fetch(`${BASE}/api/projects/${project.id}/file`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPath: renamingPath, newPath }),
+      });
+      const data = await res.json();
+      if (data.files) onFileTreeChange(data.files);
+    } catch {}
+    setRenamingPath(null);
+  };
+
+  const handleDownload = () => {
+    window.open(`${BASE}/api/projects/${project.id}/download`, "_blank");
+  };
+
   return (
     <div className="flex flex-col h-full bg-[hsl(240_10%_4%)] border-l border-border">
-      <div className="h-9 border-b border-border flex items-center justify-between px-3 shrink-0">
-        <span className="text-[10px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+      {/* Header */}
+      <div className="h-9 border-b border-border flex items-center justify-between px-2 shrink-0 gap-1">
+        <span className="text-[10px] font-mono text-muted-foreground font-semibold uppercase tracking-wider flex-1 pl-1">
           Файлууд {fileTree.filter(f => f.type === "file").length > 0 && `(${fileTree.filter(f => f.type === "file").length})`}
         </span>
-        <button
-          onClick={() => setShowKodu(!showKodu)}
-          className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
-            showKodu ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          kodu.md
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => { setCreating("file"); setNewName(""); }}
+            title="Шинэ файл"
+            className="p-1 rounded hover:bg-accent/20 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <FilePlusIcon className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => { setCreating("folder"); setNewName(""); }}
+            title="Шинэ хавтас"
+            className="p-1 rounded hover:bg-accent/20 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <FolderPlusIcon className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleDownload}
+            title="ZIP татах"
+            className="p-1 rounded hover:bg-accent/20 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <DownloadIcon className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setShowKodu(!showKodu)}
+            title="kodu.md"
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+              showKodu ? "border-primary text-primary bg-primary/10" : "border-border/60 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            .md
+          </button>
+        </div>
       </div>
 
       {showKodu ? (
@@ -497,7 +598,33 @@ function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelP
       ) : (
         <ScrollArea className="flex-1">
           <div className="py-1">
-            {fileTree.length === 0 ? (
+            {/* Inline create input */}
+            {creating && (
+              <div className="flex items-center gap-1.5 px-2 py-1 border-b border-border/40 bg-primary/5">
+                {creating === "folder"
+                  ? <FolderIcon className="w-3.5 h-3.5 text-yellow-400/80 shrink-0" />
+                  : <FileCodeIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                <input
+                  ref={createInputRef}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreate();
+                    if (e.key === "Escape") { setCreating(null); setNewName(""); }
+                  }}
+                  placeholder={creating === "folder" ? "хавтасны нэр" : "файлын нэр"}
+                  className="flex-1 bg-transparent text-[12px] font-mono text-foreground outline-none placeholder:text-muted-foreground/40"
+                />
+                <button onClick={handleCreate} className="text-primary hover:text-primary/80">
+                  <CheckIcon className="w-3 h-3" />
+                </button>
+                <button onClick={() => { setCreating(null); setNewName(""); }} className="text-muted-foreground hover:text-foreground">
+                  <XIcon className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {fileTree.length === 0 && !creating ? (
               <div className="px-4 py-6 text-center text-[11px] font-mono text-muted-foreground/40">
                 Агент файл үүсгэхэд энд харагдана
               </div>
@@ -506,43 +633,84 @@ function FilesPanel({ project, fileTree, activeFile, onSelectFile }: FilesPanelP
                 if (isHidden(item.path)) return null;
                 const depth = item.path.split("/").length - 1;
                 const name = item.path.split("/").pop() ?? item.path;
+                const isDeleting = deletingPath === item.path;
 
                 if (item.type === "dir") {
                   const isOpen = !closedDirs.has(item.path);
                   return (
-                    <button
+                    <div
                       key={item.path}
-                      onClick={() => toggleDir(item.path)}
-                      className="w-full flex items-center gap-1 py-[3px] hover:bg-accent/10 transition-colors text-left group"
+                      className="group flex items-center gap-1 py-[3px] hover:bg-accent/10 transition-colors"
                       style={{ paddingLeft: `${8 + depth * 12}px` }}
                     >
-                      {isOpen ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
-                               : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />}
-                      <FolderIcon className="w-3.5 h-3.5 text-yellow-400/80 shrink-0" />
-                      <span className="text-[12px] font-mono text-muted-foreground group-hover:text-foreground transition-colors">
-                        {name}
-                      </span>
-                    </button>
+                      <button
+                        onClick={() => toggleDir(item.path)}
+                        className="flex items-center gap-1 flex-1 text-left min-w-0"
+                      >
+                        {isOpen ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+                                 : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />}
+                        <FolderIcon className="w-3.5 h-3.5 text-yellow-400/80 shrink-0" />
+                        <span className="text-[12px] font-mono text-muted-foreground group-hover:text-foreground transition-colors truncate">
+                          {name}
+                        </span>
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(item.path, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity mr-1 p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 text-muted-foreground/50 shrink-0"
+                      >
+                        {isDeleting ? <Loader2Icon className="w-3 h-3 animate-spin" /> : <XIcon className="w-3 h-3" />}
+                      </button>
+                    </div>
                   );
                 }
 
                 const isActive = activeFile === item.path;
                 return (
-                  <button
+                  <div
                     key={item.path}
-                    onClick={() => onSelectFile(item.path)}
-                    className={`w-full flex items-center gap-1.5 py-[3px] hover:bg-accent/10 transition-colors text-left ${
+                    className={`group flex items-center gap-1.5 py-[3px] hover:bg-accent/10 transition-colors ${
                       isActive ? "bg-primary/10 border-l-2 border-primary" : ""
                     }`}
                     style={{ paddingLeft: `${8 + depth * 12}px` }}
                   >
-                    <FileCodeIcon className={`w-3.5 h-3.5 shrink-0 ${extColor(name)}`} />
-                    <span className={`text-[12px] font-mono transition-colors truncate ${
-                      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                    }`}>
-                      {name}
-                    </span>
-                  </button>
+                    {renamingPath === item.path ? (
+                      <>
+                        <FileCodeIcon className={`w-3.5 h-3.5 shrink-0 ${extColor(name)}`} />
+                        <input
+                          ref={renameInputRef}
+                          value={renameName}
+                          onChange={(e) => setRenameName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameCommit();
+                            if (e.key === "Escape") setRenamingPath(null);
+                          }}
+                          onBlur={handleRenameCommit}
+                          className="flex-1 bg-primary/10 text-[12px] font-mono text-foreground outline-none border-b border-primary px-0.5 min-w-0"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onSelectFile(item.path)}
+                          onDoubleClick={(e) => handleRenameStart(item.path, e)}
+                          className="flex items-center gap-1.5 flex-1 text-left min-w-0"
+                        >
+                          <FileCodeIcon className={`w-3.5 h-3.5 shrink-0 ${extColor(name)}`} />
+                          <span className={`text-[12px] font-mono transition-colors truncate ${
+                            isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                          }`}>
+                            {name}
+                          </span>
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(item.path, e)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity mr-1 p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 text-muted-foreground/50 shrink-0"
+                        >
+                          {isDeleting ? <Loader2Icon className="w-3 h-3 animate-spin" /> : <XIcon className="w-3 h-3" />}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 );
               })
             )}
@@ -806,7 +974,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
             if (ev.type === "tool_call") {
               const localId = String(++toolCallIdRef.current);
               toolIdMap[ev.tool + localId] = localId;
-              setStatusMsg(`${TOOL_LABEL[ev.tool] ?? ev.tool}...`);
+              setStatusMsg(`${TOOL_META[ev.tool]?.label ?? ev.tool}...`);
               setToolCalls((prev) => [
                 ...prev,
                 { id: localId, tool: ev.tool, input: ev.input, done: false },
