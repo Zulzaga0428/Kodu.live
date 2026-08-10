@@ -24,6 +24,7 @@ import {
   ChevronRightIcon, ClockIcon, TrendingUpIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { SettingsModal } from "@/components/settings-modal";
 
 const createProjectSchema = z.object({
   name: z.string().min(1, "Нэр оруулна уу"),
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | ProjectStatus>("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -91,6 +93,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex">
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       {/* ── Sidebar ── */}
       <aside className="w-56 shrink-0 border-r border-border/50 flex flex-col bg-card/20 hidden md:flex">
@@ -107,7 +110,13 @@ export default function Dashboard() {
           <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest px-2 mb-2">Навигаци</p>
           <NavItem icon={<ZapIcon className="w-3.5 h-3.5" />} label="Dashboard" active href="/dashboard" />
           <NavItem icon={<FolderIcon className="w-3.5 h-3.5" />} label="Төслүүд" href="/dashboard" />
-          <NavItem icon={<SettingsIcon className="w-3.5 h-3.5" />} label="Тохиргоо" href="/dashboard" />
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-xs font-mono transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/10"
+          >
+            <SettingsIcon className="w-3.5 h-3.5" />
+            Тохиргоо
+          </button>
 
           <div className="mt-6">
             <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest px-2 mb-2">Шүүлтүүр</p>

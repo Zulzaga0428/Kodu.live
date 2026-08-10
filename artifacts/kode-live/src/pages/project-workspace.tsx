@@ -16,6 +16,7 @@ import {
   FileCodeIcon, RefreshCwIcon, MoreHorizontalIcon, ZapIcon
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { SettingsModal } from "@/components/settings-modal";
 
 import {
   useGetProject,
@@ -104,6 +105,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
 export default function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: project, isLoading, error } = useGetProject(id, {
@@ -136,6 +138,7 @@ export default function ProjectWorkspace() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden">
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       {/* ── Top bar ── */}
       <header className="h-11 border-b border-border flex items-center justify-between px-3 shrink-0 bg-card z-10">
         {/* Left */}
@@ -178,6 +181,10 @@ export default function ProjectWorkspace() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 font-mono text-xs">
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                <SettingsIcon className="w-3 h-3 mr-2" /> Тохиргоо
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => handleStatusChange(ProjectStatus.active)}>
                 Идэвхтэй болгох
               </DropdownMenuItem>
