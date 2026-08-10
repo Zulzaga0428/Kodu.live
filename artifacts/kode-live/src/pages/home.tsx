@@ -5,10 +5,70 @@ import {
   LayoutTemplateIcon, SendIcon, SparklesIcon, GitForkIcon,
   Loader2Icon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const CATEGORIES = ["Бүгд", "Landing", "Dashboard", "Portfolio", "SaaS", "Blog", "E-commerce"];
+// ── Translations ──────────────────────────────────────────────────────────────
+type Lang = "mn" | "en";
+
+const T = {
+  mn: {
+    nav: { templates: "Загварууд", pricing: "Үнэ", login: "Нэвтрэх", start: "Үнэгүй эхлэх" },
+    hero: {
+      h1a: "Мөрөөдлийн сайтаа",
+      h1b: "хий.",
+      sub: "KoDu — таны санааг 5 минутад бодит болгоно.",
+      placeholder: "Юу хийлгэх вэ? (жишээ: кофе шопны landing page хий)",
+      hint: "Enter дарж эхлэнэ · Шинэ хэрэглэгч бүр 50кр үнэгүй авна",
+      powered: "Powered by Zulzaga AI",
+    },
+    templates: {
+      title: "Загварууд",
+      viewAll: "Бүгдийг харах",
+      empty: "Одоохондоо загвар байхгүй — та анхных нь болоорой!",
+      emptyCat: "Энэ ангилалд загвар байхгүй",
+      newProject: "Шинэ project эхлэх →",
+      fork: "Авах",
+      noName: "Нэргүй",
+      allCat: "Бүгд",
+    },
+    stats: [
+      { val: "129+", label: "Хөгжүүлэгч",    sub: "Идэвхтэй хэрэглэгчид" },
+      { val: "Claude", label: "AI Хөдөлгүүр", sub: "Anthropic-д суурилсан" },
+      { val: "100%",  label: "Монгол хэл",    sub: "Анхны монгол платформ" },
+    ],
+    footer: "Монголд хийсэн",
+  },
+  en: {
+    nav: { templates: "Templates", pricing: "Pricing", login: "Sign in", start: "Start free" },
+    hero: {
+      h1a: "Build your",
+      h1b: "dream site.",
+      sub: "KoDu — turns your idea into reality in 5 minutes.",
+      placeholder: "What do you want to build? (e.g. build a coffee shop landing page)",
+      hint: "Press Enter to start · New users get 50 credits free",
+      powered: "Powered by Zulzaga AI",
+    },
+    templates: {
+      title: "Templates",
+      viewAll: "View all",
+      empty: "No templates yet — be the first to share one!",
+      emptyCat: "No templates in this category",
+      newProject: "Start new project →",
+      fork: "Use",
+      noName: "Anonymous",
+      allCat: "All",
+    },
+    stats: [
+      { val: "129+",   label: "Developers",  sub: "Active users" },
+      { val: "Claude", label: "AI Engine",   sub: "Powered by Anthropic" },
+      { val: "100%",   label: "Mongolian",   sub: "Native-first platform" },
+    ],
+    footer: "Made in Mongolia",
+  },
+} as const;
+
+const CATEGORIES_MN = ["Бүгд", "Landing", "Dashboard", "Portfolio", "SaaS", "Blog", "E-commerce"];
+const CATEGORIES_EN = ["All",  "Landing", "Dashboard", "Portfolio", "SaaS", "Blog", "E-commerce"];
 
 const TEMPLATE_COLORS = [
   "from-violet-900/60 to-indigo-900/60",
@@ -25,13 +85,14 @@ type Template = {
   templateAuthor: string | null; forkCount: number;
 };
 
-function TemplateCard({ t, idx, onFork, forking }: {
-  t: Template; idx: number; onFork: (id: string) => void; forking: string | null;
+// ── Template Card ─────────────────────────────────────────────────────────────
+function TemplateCard({ t, idx, onFork, forking, forkLabel, noName }: {
+  t: Template; idx: number; onFork: (id: string) => void;
+  forking: string | null; forkLabel: string; noName: string;
 }) {
   const gradient = TEMPLATE_COLORS[idx % TEMPLATE_COLORS.length];
   return (
     <div className="group rounded-2xl border border-white/10 overflow-hidden hover:border-white/20 transition-all hover:-translate-y-0.5 bg-[#111318]">
-      {/* Thumbnail */}
       <div className={`h-40 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
         {t.thumbnailUrl ? (
           <img src={t.thumbnailUrl} alt={t.name} className="w-full h-full object-cover" />
@@ -45,20 +106,15 @@ function TemplateCard({ t, idx, onFork, forking }: {
             </div>
           </div>
         )}
-        {/* Fork button */}
         <button
           onClick={() => onFork(t.id)}
           disabled={forking === t.id}
           className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/90 hover:bg-white text-black text-[11px] font-bold font-mono shadow-lg disabled:opacity-50"
         >
-          {forking === t.id
-            ? <Loader2Icon className="w-3 h-3 animate-spin" />
-            : <GitForkIcon className="w-3 h-3" />
-          }
-          Авах
+          {forking === t.id ? <Loader2Icon className="w-3 h-3 animate-spin" /> : <GitForkIcon className="w-3 h-3" />}
+          {forkLabel}
         </button>
       </div>
-      {/* Info */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <h3 className="font-semibold text-sm text-white truncate">{t.name}</h3>
@@ -72,7 +128,7 @@ function TemplateCard({ t, idx, onFork, forking }: {
           <p className="text-[11px] text-white/40 line-clamp-2 mb-2">{t.description}</p>
         )}
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-white/30 font-mono">{t.templateAuthor ?? "Нэргүй"}</span>
+          <span className="text-[10px] text-white/30 font-mono">{t.templateAuthor ?? noName}</span>
           <span className="text-[10px] text-white/30 font-mono flex items-center gap-0.5">
             <GitForkIcon className="w-2.5 h-2.5" /> {t.forkCount}
           </span>
@@ -82,14 +138,26 @@ function TemplateCard({ t, idx, onFork, forking }: {
   );
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [, setLocation] = useLocation();
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<"fast" | "smart" | "deep">("smart");
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [activeCategory, setActiveCategory] = useState("Бүгд");
+  const [activeCategory, setActiveCategory] = useState(0); // index into CATEGORIES
   const [forking, setForking] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>(() => {
+    try { return (localStorage.getItem("kodu_lang") as Lang) ?? "mn"; } catch { return "mn"; }
+  });
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const tr = T[lang];
+  const CATEGORIES = lang === "mn" ? CATEGORIES_MN : CATEGORIES_EN;
+
+  // Persist language choice
+  useEffect(() => {
+    try { localStorage.setItem("kodu_lang", lang); } catch {}
+  }, [lang]);
 
   useEffect(() => {
     fetch(`${BASE}/api/templates`)
@@ -98,26 +166,16 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  const filteredTemplates = activeCategory === "Бүгд"
+  const filteredTemplates = activeCategory === 0
     ? templates
-    : templates.filter(t => t.templateCategory === activeCategory);
+    : templates.filter(t => t.templateCategory === CATEGORIES_EN[activeCategory]);
 
   const handlePromptSubmit = () => {
     if (!prompt.trim()) return;
     setLocation(`/dashboard?prompt=${encodeURIComponent(prompt)}`);
   };
 
-  const handleFork = async (id: string) => {
-    setForking(id);
-    try {
-      const r = await fetch(`${BASE}/api/templates/${id}/fork`, { method: "POST" });
-      const d = await r.json();
-      if (d.project?.id) setLocation(`/projects/${d.project.id}`);
-      else setLocation("/dashboard");
-    } catch {
-      setLocation("/dashboard");
-    } finally { setForking(null); }
-  };
+  const toggleLang = () => setLang(l => l === "mn" ? "en" : "mn");
 
   const MODEL_OPTS = [
     { id: "fast" as const,  label: "Fast",  cost: "4кр",  icon: <ZapIcon className="w-3 h-3 text-yellow-400" /> },
@@ -128,9 +186,11 @@ export default function Home() {
 
   return (
     <div className="min-h-[100dvh] w-full bg-[#080a10] text-white flex flex-col">
+
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-50 border-b border-white/8 bg-[#080a10]/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
               <span className="font-black text-white text-xs">K</span>
@@ -140,20 +200,30 @@ export default function Home() {
             </span>
           </div>
 
+          {/* Center links */}
           <div className="hidden md:flex items-center gap-6 text-sm text-white/50 font-mono">
-            <a href="#templates" className="hover:text-white transition-colors">Templates</a>
-            <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
+            <a href="#templates" className="hover:text-white transition-colors">{tr.nav.templates}</a>
+            <Link href="/pricing" className="hover:text-white transition-colors">{tr.nav.pricing}</Link>
           </div>
 
+          {/* Right actions */}
           <div className="flex items-center gap-2">
+            {/* 🌐 Language toggle */}
+            <button
+              onClick={toggleLang}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-xs font-mono transition-all"
+            >
+              {lang === "mn" ? "🇲🇳 MN" : "🇬🇧 EN"}
+            </button>
+
             <Link href="/dashboard">
               <button className="text-sm font-mono text-white/50 hover:text-white px-3 py-1.5 transition-colors">
-                Нэвтрэх
+                {tr.nav.login}
               </button>
             </Link>
             <Link href="/dashboard">
               <button className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-mono font-semibold px-4 py-1.5 rounded-lg transition-colors">
-                Үнэгүй эхлэх
+                {tr.nav.start}
               </button>
             </Link>
           </div>
@@ -162,18 +232,16 @@ export default function Home() {
 
       {/* ── Hero ── */}
       <section className="flex flex-col items-center justify-center px-6 pt-24 pb-16 relative overflow-hidden">
-        {/* BG glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-20 left-1/3 w-[300px] h-[300px] bg-blue-600/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-3xl mx-auto text-center">
-          {/* Headline */}
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 leading-[1.05]">
-            Мөрөөдлийн сайтаа<br />
-            <span className="text-violet-400">хий.</span>
+            {tr.hero.h1a}<br />
+            <span className="text-violet-400">{tr.hero.h1b}</span>
           </h1>
           <p className="text-white/40 text-base md:text-lg mb-10 font-mono">
-            KoDu — таны санааг 5 минутад бодит болгоно.
+            {tr.hero.sub}
           </p>
 
           {/* AI input box */}
@@ -207,7 +275,7 @@ export default function Home() {
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(); } }}
-                placeholder="Юу хийлгэх вэ? (жишээ: кофе шопны landing page хий)"
+                placeholder={tr.hero.placeholder}
                 rows={3}
                 className="w-full bg-transparent text-white/90 text-sm font-mono placeholder:text-white/20 outline-none resize-none leading-relaxed"
               />
@@ -217,7 +285,7 @@ export default function Home() {
             <div className="flex items-center justify-between px-4 py-3 border-t border-white/8">
               <div className="flex items-center gap-2 text-[11px] font-mono text-white/25">
                 <SparklesIcon className="w-3 h-3" />
-                <span>Powered by Zulzaga AI</span>
+                <span>{tr.hero.powered}</span>
               </div>
               <button
                 onClick={handlePromptSubmit}
@@ -229,9 +297,7 @@ export default function Home() {
             </div>
           </div>
 
-          <p className="text-[11px] font-mono text-white/20">
-            Enter дарж эхлэнэ · Шинэ хэрэглэгч бүр 50кр үнэгүй авна
-          </p>
+          <p className="text-[11px] font-mono text-white/20">{tr.hero.hint}</p>
         </div>
       </section>
 
@@ -239,22 +305,22 @@ export default function Home() {
       <section id="templates" className="px-6 pb-24">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Templates</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{tr.templates.title}</h2>
             <Link href="/templates">
               <button className="text-xs font-mono text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
-                Бүгдийг харах <ArrowRightIcon className="w-3 h-3" />
+                {tr.templates.viewAll} <ArrowRightIcon className="w-3 h-3" />
               </button>
             </Link>
           </div>
 
           {/* Category pills */}
           <div className="flex gap-2 flex-wrap mb-6">
-            {CATEGORIES.map(cat => (
+            {CATEGORIES.map((cat, i) => (
               <button
                 key={cat}
-                onClick={() => setActiveCategory(cat)}
+                onClick={() => setActiveCategory(i)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
-                  activeCategory === cat
+                  activeCategory === i
                     ? "bg-violet-600 text-white"
                     : "border border-white/10 text-white/40 hover:border-white/20 hover:text-white/60"
                 }`}
@@ -268,21 +334,33 @@ export default function Home() {
             <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl">
               <LayoutTemplateIcon className="w-10 h-10 text-white/10 mx-auto mb-3" />
               <p className="text-white/30 text-sm font-mono">
-                {templates.length === 0
-                  ? "Одоохондоо template байхгүй байна — та анхных нь болоорой!"
-                  : "Энэ ангилалд template байхгүй"
-                }
+                {templates.length === 0 ? tr.templates.empty : tr.templates.emptyCat}
               </p>
               <Link href="/dashboard">
                 <button className="mt-4 text-xs font-mono text-violet-400 hover:text-violet-300 transition-colors">
-                  Шинэ project эхлэх →
+                  {tr.templates.newProject}
                 </button>
               </Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredTemplates.map((t, i) => (
-                <TemplateCard key={t.id} t={t} idx={i} onFork={handleFork} forking={forking} />
+                <TemplateCard
+                  key={t.id} t={t} idx={i}
+                  onFork={async (id) => {
+                    setForking(id);
+                    try {
+                      const r = await fetch(`${BASE}/api/templates/${id}/fork`, { method: "POST" });
+                      const d = await r.json();
+                      if (d.project?.id) setLocation(`/projects/${d.project.id}`);
+                      else setLocation("/dashboard");
+                    } catch { setLocation("/dashboard"); }
+                    finally { setForking(null); }
+                  }}
+                  forking={forking}
+                  forkLabel={tr.templates.fork}
+                  noName={tr.templates.noName}
+                />
               ))}
             </div>
           )}
@@ -292,11 +370,7 @@ export default function Home() {
       {/* ── Stats strip ── */}
       <section className="py-12 px-6 border-t border-white/8 bg-white/2">
         <div className="max-w-4xl mx-auto grid grid-cols-3 gap-8 text-center">
-          {[
-            { val: "129+", label: "Хөгжүүлэгч", sub: "Active developers" },
-            { val: "Claude", label: "AI Хөдөлгүүр", sub: "Powered by Anthropic" },
-            { val: "100%", label: "Монгол хэл", sub: "Native Mongolian" },
-          ].map((s, i) => (
+          {tr.stats.map((s, i) => (
             <div key={i}>
               <div className="text-3xl font-black font-mono text-violet-400 mb-1">{s.val}</div>
               <div className="text-sm font-semibold text-white">{s.label}</div>
@@ -310,7 +384,7 @@ export default function Home() {
       <footer className="border-t border-white/8 py-6 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <span className="font-mono text-sm text-white/30">kodu.live</span>
-          <p className="text-xs font-mono text-white/20">© 2026 kodu.live — Made in Mongolia 🇲🇳</p>
+          <p className="text-xs font-mono text-white/20">© 2026 kodu.live — {tr.footer} 🇲🇳</p>
         </div>
       </footer>
     </div>
