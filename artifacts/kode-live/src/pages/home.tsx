@@ -47,7 +47,7 @@ export default function Home() {
         <div className="container mx-auto px-6 h-14 flex items-center justify-between max-w-6xl">
           <div className="flex items-center gap-2">
             <TerminalSquareIcon className="w-5 h-5 text-primary" />
-            <span className="font-bold font-mono text-lg tracking-tight">kode<span className="text-primary">.live</span></span>
+            <span className="font-bold font-mono text-lg tracking-tight">kodu<span className="text-primary">.live</span></span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/dashboard">
@@ -116,7 +116,7 @@ export default function Home() {
               <span className="w-3 h-3 rounded-full bg-red-500/70" />
               <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
               <span className="w-3 h-3 rounded-full bg-green-500/70" />
-              <span className="flex-1 text-center text-[11px] font-mono text-muted-foreground/60">kode.live — terminal</span>
+              <span className="flex-1 text-center text-[11px] font-mono text-muted-foreground/60">kodu.live — terminal</span>
             </div>
             {/* Terminal body */}
             <div className="bg-[#0a0a0f] p-5 font-mono text-[13px] flex flex-col gap-1.5">
@@ -214,9 +214,9 @@ export default function Home() {
         <div className="container mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TerminalSquareIcon className="w-4 h-4 text-primary/60" />
-            <span className="font-mono text-sm text-muted-foreground/60">kode.live</span>
+            <span className="font-mono text-sm text-muted-foreground/60">kodu.live</span>
           </div>
-          <p className="text-xs font-mono text-muted-foreground/40">© 2026 kode.live — Made in Mongolia 🇲🇳</p>
+          <p className="text-xs font-mono text-muted-foreground/40">© 2026 kodu.live — Made in Mongolia 🇲🇳</p>
         </div>
       </footer>
     </div>

@@ -98,7 +98,7 @@ export default function Dashboard() {
         <div className="h-14 flex items-center px-4 border-b border-border/50">
           <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <TerminalSquareIcon className="w-5 h-5 text-primary" />
-            <span className="font-bold font-mono text-base tracking-tight">kode<span className="text-primary">.live</span></span>
+            <span className="font-bold font-mono text-base tracking-tight">kodu<span className="text-primary">.live</span></span>
           </Link>
         </div>
 
@@ -140,7 +140,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-mono font-semibold truncate">Хөгжүүлэгч</p>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">dev@kode.live</p>
+              <p className="text-[10px] text-muted-foreground font-mono truncate">dev@kodu.live</p>
             </div>
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function Dashboard() {
           {/* Mobile logo */}
           <div className="flex items-center gap-2 md:hidden">
             <TerminalSquareIcon className="w-5 h-5 text-primary" />
-            <span className="font-bold font-mono">kode.live</span>
+            <span className="font-bold font-mono">kodu.live</span>
           </div>
 
           {/* Search */}

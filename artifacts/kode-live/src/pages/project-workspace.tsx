@@ -65,7 +65,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col 
       items-center justify-center p-24">
       <h1 className="text-4xl font-bold">
-        Сайн уу, kode.live! 👋
+        Сайн уу, kodu.live! 👋
       </h1>
       <p className="mt-4 text-lg text-muted-foreground">
         Таны Next.js апп бэлэн боллоо.
@@ -303,7 +303,7 @@ function WorkspacePanel() {
                 <span className="flex-1 text-center text-[10px] font-mono text-muted-foreground">localhost:3000</span>
               </div>
               <div className="h-64 bg-[#111] flex flex-col items-center justify-center text-center p-6">
-                <h2 className="text-lg font-bold text-white mb-2">Сайн уу, kode.live! 👋</h2>
+                <h2 className="text-lg font-bold text-white mb-2">Сайн уу, kodu.live! 👋</h2>
                 <p className="text-sm text-gray-400">Таны Next.js апп бэлэн боллоо.</p>
                 <div className="mt-4 px-4 py-2 rounded-lg bg-primary/20 border border-primary/30 text-primary text-xs font-mono">
                   ✓ Compiled successfully
