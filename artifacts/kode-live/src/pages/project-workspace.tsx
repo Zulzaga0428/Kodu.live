@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
+import { useSettings } from "@/hooks/use-settings";
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 import { Link, useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -306,6 +307,41 @@ type WorkspacePanelProps = {
   terminalLines: TerminalLine[];
 };
 
+// Monaco editor wrapped with settings
+function MonacoEditorWithSettings({
+  activeFile, activeContent, onContentChange,
+}: { activeFile: string; activeContent: string; onContentChange: (v: string) => void }) {
+  const { settings } = useSettings();
+  return (
+    <MonacoEditor
+      height="100%"
+      path={activeFile}
+      language={monacoLang(activeFile)}
+      value={activeContent}
+      onChange={(v) => onContentChange(v ?? "")}
+      theme={settings.theme === "light" ? "vs" : "vs-dark"}
+      options={{
+        fontSize: Number(settings.fontSize) || 13,
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        fontLigatures: true,
+        lineHeight: 22,
+        tabSize: Number(settings.tabSize) || 2,
+        minimap: { enabled: settings.minimap },
+        scrollBeyondLastLine: false,
+        wordWrap: settings.wordWrap ? "on" : "off",
+        renderLineHighlight: "gutter",
+        smoothScrolling: true,
+        cursorBlinking: "smooth",
+        cursorSmoothCaretAnimation: "on",
+        padding: { top: 12, bottom: 12 },
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+      }}
+    />
+  );
+}
+
 function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLines }: WorkspacePanelProps) {
   const [tab, setTab] = useState<WorkspaceTab>("code");
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -340,31 +376,10 @@ function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLi
                   <Loader2Icon className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
               }>
-                <MonacoEditor
-                  height="100%"
-                  path={activeFile}
-                  language={monacoLang(activeFile)}
-                  value={activeContent}
-                  onChange={(v) => onContentChange(v ?? "")}
-                  theme="vs-dark"
-                  options={{
-                    fontSize: 13,
-                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-                    fontLigatures: true,
-                    lineHeight: 22,
-                    tabSize: 2,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: "on",
-                    renderLineHighlight: "gutter",
-                    smoothScrolling: true,
-                    cursorBlinking: "smooth",
-                    cursorSmoothCaretAnimation: "on",
-                    padding: { top: 12, bottom: 12 },
-                    overviewRulerLanes: 0,
-                    hideCursorInOverviewRuler: true,
-                    scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-                  }}
+                <MonacoEditorWithSettings
+                  activeFile={activeFile}
+                  activeContent={activeContent}
+                  onContentChange={onContentChange}
                 />
               </Suspense>
             ) : (
@@ -913,6 +928,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
   const { data: messages, isLoading, refetch } = useListMessages(projectId, {
     query: { enabled: !!projectId, queryKey: getListMessagesQueryKey(projectId) },
   });
+  const { settings: agentSettings } = useSettings();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -942,7 +958,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
       const res = await fetch(`${BASE}/api/projects/${projectId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, model: agentSettings.model, maxTokens: agentSettings.maxTokens }),
         signal: abortRef.current.signal,
       });
 

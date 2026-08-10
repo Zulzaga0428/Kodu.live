@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, count, inArray } from "drizzle-orm";
 import { db, projectsTable, messagesTable, tasksTable } from "@workspace/db";
+import fs from "fs/promises";
+import path from "path";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -151,6 +153,29 @@ router.get("/stats", async (_req, res): Promise<void> => {
       totalTasks: Number(totalTasks.cnt),
     })
   );
+});
+
+// ── DELETE /api/projects/all — delete all projects ───────────────────────────
+router.delete("/projects/all", async (req, res): Promise<void> => {
+  const projects = await db.select({ id: projectsTable.id }).from(projectsTable);
+  for (const p of projects) {
+    await db.delete(messagesTable).where(eq(messagesTable.projectId, p.id));
+    await db.delete(tasksTable).where(eq(tasksTable.projectId, p.id));
+    // Remove temp dir
+    const dir = path.join("/tmp/kodu-projects", p.id);
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+  await db.delete(projectsTable);
+  res.json({ ok: true });
+});
+
+// ── GET /api/export — export all data as JSON ─────────────────────────────────
+router.get("/export", async (req, res): Promise<void> => {
+  const projects = await db.select().from(projectsTable);
+  const messages = await db.select().from(messagesTable);
+  const tasks = await db.select().from(tasksTable);
+  res.setHeader("Content-Type", "application/json");
+  res.json({ exportedAt: new Date().toISOString(), projects, messages, tasks });
 });
 
 export default router;

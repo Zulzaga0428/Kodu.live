@@ -6,7 +6,6 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
-import archiver from "archiver";
 
 const router: IRouter = Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -199,7 +198,7 @@ const SYSTEM_PROMPT = `Та бол kodu.live-ийн AI кодчиллын аге
 
 router.post("/projects/:id/chat", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const { content } = req.body;
+  const { content, model, maxTokens } = req.body;
 
   if (!content?.trim()) {
     res.status(400).json({ error: "content шаардлагатай" });
@@ -240,8 +239,8 @@ router.post("/projects/:id/chat", async (req, res): Promise<void> => {
     // ── Agentic loop ────────────────────────────────────────────────────────
     for (let loop = 0; loop < 20; loop++) {
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 8192,
+        model: model ?? "claude-sonnet-4-5",
+        max_tokens: maxTokens ? Number(maxTokens) : 8192,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
         messages,
@@ -411,21 +410,23 @@ router.get("/projects/:id/download", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Төсөл олдсонгүй" }); return;
   }
 
-  // Get project name from DB for filename
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   const filename = (project?.name ?? "project").replace(/[^a-zA-Z0-9-_]/g, "_");
 
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}.zip"`);
-
-  const archive = archiver("zip", { zlib: { level: 6 } });
-  archive.on("error", (err) => { if (!res.headersSent) res.status(500).end(); });
-  archive.pipe(res);
-  archive.glob("**/*", {
-    cwd: dir,
-    ignore: ["node_modules/**", ".next/**", ".git/**", "dist/**"],
-  });
-  await archive.finalize();
+  const tmpZip = `/tmp/kodu-zip-${id}.zip`;
+  try {
+    // Use system zip; exclude heavy dirs
+    await execAsync(
+      `zip -r "${tmpZip}" . -x "node_modules/*" ".next/*" ".git/*" "dist/*"`,
+      { cwd: dir }
+    );
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.zip"`);
+    const zipData = await fs.readFile(tmpZip);
+    res.send(zipData);
+  } finally {
+    fs.unlink(tmpZip).catch(() => {});
+  }
 });
 
 export default router;
