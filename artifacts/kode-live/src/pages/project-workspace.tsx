@@ -114,9 +114,12 @@ export default function ProjectWorkspace() {
 
   useEffect(() => { fetchFileTree(); }, [fetchFileTree]);
 
+  const [fileWriteCount, setFileWriteCount] = useState(0);
+
   // Called by ChatPanel when agent writes/deletes a file
   const handleFileChanged = useCallback((path: string, content: string) => {
     if (activeFile === path) setActiveContent(content);
+    setFileWriteCount((n) => n + 1);
   }, [activeFile]);
 
   const handleFileTree = useCallback((files: FileEntry[]) => {
@@ -246,6 +249,7 @@ export default function ProjectWorkspace() {
               activeContent={activeContent}
               onContentChange={setActiveContent}
               terminalLines={terminalLines}
+              fileWriteCount={fileWriteCount}
             />
           </ResizablePanel>
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
@@ -307,6 +311,7 @@ type WorkspacePanelProps = {
   activeContent: string;
   onContentChange: (c: string) => void;
   terminalLines: TerminalLine[];
+  fileWriteCount: number;
 };
 
 // Monaco editor wrapped with settings
@@ -354,12 +359,27 @@ interface PreviewState {
   buildLogs?: string;
 }
 
-function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange, terminalLines }: WorkspacePanelProps) {
+function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange, terminalLines, fileWriteCount }: WorkspacePanelProps) {
   const [tab, setTab] = useState<WorkspaceTab>("code");
   const terminalRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<PreviewState>({ status: "idle" });
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  // ── Auto hot-reload preview when agent writes files ────────────────────────
+  useEffect(() => {
+    if (fileWriteCount === 0 || preview.status !== "ready") return;
+    const hotReload = async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/preview/files`, { method: "PUT" });
+      if (res.status === 404) {
+        // Preview expired — reset so user can re-create
+        setPreview({ status: "idle" });
+      }
+    };
+    // Debounce: wait 1.5s after last write before reloading
+    const t = setTimeout(hotReload, 1500);
+    return () => clearTimeout(t);
+  }, [fileWriteCount]);
 
   // ── Create preview ────────────────────────────────────────────────────────
   const createPreview = async () => {

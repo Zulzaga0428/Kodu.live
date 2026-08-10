@@ -33,6 +33,14 @@ const createProjectSchema = z.object({
 });
 type CreateProjectForm = z.infer<typeof createProjectSchema>;
 
+type TemplateId = "blank" | "landing" | "dashboard" | "portfolio";
+const TEMPLATES: { id: TemplateId; icon: string; label: string; desc: string }[] = [
+  { id: "blank",     icon: "✦",  label: "Хоосон",       desc: "Цэвэр Next.js starter" },
+  { id: "landing",   icon: "🚀", label: "Landing Page", desc: "Hero, features, pricing" },
+  { id: "dashboard", icon: "📊", label: "Dashboard",    desc: "Sidebar, stat cards" },
+  { id: "portfolio", icon: "🎨", label: "Portfolio",    desc: "Хувийн сайт, projects" },
+];
+
 function statusVariant(s: ProjectStatus): "default" | "secondary" | "outline" {
   return s === ProjectStatus.active ? "default" : s === ProjectStatus.completed ? "secondary" : "outline";
 }
@@ -58,6 +66,8 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<"all" | ProjectStatus>("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("blank");
+  const [createStep, setCreateStep] = useState<"template" | "details">("template");
 
   const { data: stats, isLoading: statsLoading } = useGetStats();
   const { data: projects, isLoading: projectsLoading } = useListProjects();
@@ -69,16 +79,27 @@ export default function Dashboard() {
   });
 
   const onSubmit = (data: CreateProjectForm) => {
-    createProject.mutate({ data }, {
-      onSuccess: (newProject) => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...data, template: selectedTemplate }),
+    })
+      .then((r) => r.json())
+      .then((newProject) => {
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() });
         setIsCreateOpen(false);
+        setCreateStep("template");
         form.reset();
         setLocation(`/projects/${newProject.id}`);
-      },
-      onError: () => toast({ title: "Алдаа гарлаа", description: "Төсөл үүсгэхэд алдаа гарлаа.", variant: "destructive" }),
-    });
+      })
+      .catch(() => toast({ title: "Алдаа гарлаа", description: "Төсөл үүсгэхэд алдаа гарлаа.", variant: "destructive" }));
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsCreateOpen(open);
+    if (!open) { setCreateStep("template"); setSelectedTemplate("blank"); form.reset(); }
   };
 
   const filtered = (projects ?? [])
@@ -186,45 +207,85 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <Dialog open={isCreateOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button size="sm" className="font-mono text-xs h-8 gap-1.5">
                   <PlusIcon className="w-3.5 h-3.5" />
                   Шинэ төсөл
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[420px] border-border/50">
-                <DialogHeader>
-                  <DialogTitle className="font-mono text-lg">Шинэ төсөл үүсгэх</DialogTitle>
-                  <DialogDescription className="text-sm">AI агенттай хамт кодоо эхлүүлэх</DialogDescription>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-mono">Төслийн нэр</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Жишээ нь: SaaS Dashboard" {...field} className="font-mono bg-background" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="description" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-mono">Тайлбар (заавал биш)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Энэ төсөл юу хийдэг вэ?" {...field} className="font-mono min-h-[80px] resize-none bg-background text-sm" />
-                        </FormControl>
-                      </FormItem>
-                    )} />
-                    <DialogFooter>
-                      <Button type="submit" disabled={createProject.isPending} className="w-full font-mono">
-                        {createProject.isPending && <Loader2Icon className="w-3.5 h-3.5 mr-2 animate-spin" />}
-                        ҮҮСГЭХ
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
+              <DialogContent className="sm:max-w-[520px] border-border/50 p-0 overflow-hidden">
+                {createStep === "template" ? (
+                  <div className="p-6 space-y-4">
+                    <DialogHeader>
+                      <DialogTitle className="font-mono text-base">Template сонгох</DialogTitle>
+                      <DialogDescription className="text-xs">Эхлэх цэгээ сонгоно уу</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {TEMPLATES.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSelectedTemplate(t.id)}
+                          className={`text-left p-4 rounded-xl border transition-all ${
+                            selectedTemplate === t.id
+                              ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                              : "border-border/50 bg-card/50 hover:border-border hover:bg-card"
+                          }`}
+                        >
+                          <div className="text-xl mb-2">{t.icon}</div>
+                          <div className="font-mono text-sm font-semibold">{t.label}</div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">{t.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <Button className="w-full font-mono text-xs" onClick={() => setCreateStep("details")}>
+                      Үргэлжлүүлэх →
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-4">
+                    <DialogHeader>
+                      <button
+                        onClick={() => setCreateStep("template")}
+                        className="text-[11px] text-muted-foreground hover:text-foreground font-mono mb-1 flex items-center gap-1 transition-colors"
+                      >
+                        ← Template сонгох
+                      </button>
+                      <DialogTitle className="font-mono text-base flex items-center gap-2">
+                        <span>{TEMPLATES.find((t) => t.id === selectedTemplate)?.icon}</span>
+                        {TEMPLATES.find((t) => t.id === selectedTemplate)?.label}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs">Төслийн мэдээлэл оруулна уу</DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField control={form.control} name="name" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs font-mono">Нэр</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Жишээ нь: SaaS Dashboard" {...field} className="font-mono bg-background text-sm" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="description" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs font-mono">Тайлбар (заавал биш)</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="Энэ төсөл юу хийдэг вэ?" {...field} className="font-mono min-h-[70px] resize-none bg-background text-sm" />
+                            </FormControl>
+                          </FormItem>
+                        )} />
+                        <Button type="submit" disabled={createProject.isPending} className="w-full font-mono text-xs">
+                          {createProject.isPending
+                            ? <><Loader2Icon className="w-3.5 h-3.5 mr-2 animate-spin" />Үүсгэж байна...</>
+                            : "⚡ ТӨСӨЛ ҮҮСГЭХ"
+                          }
+                        </Button>
+                      </form>
+                    </Form>
+                  </div>
+                )}
               </DialogContent>
             </Dialog>
           </div>

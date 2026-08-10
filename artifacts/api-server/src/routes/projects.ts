@@ -3,6 +3,7 @@ import { eq, count, inArray } from "drizzle-orm";
 import { db, projectsTable, messagesTable, tasksTable } from "@workspace/db";
 import fs from "fs/promises";
 import path from "path";
+import { TEMPLATES, type TemplateId } from "../templates";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -18,9 +19,17 @@ import {
 
 const router: IRouter = Router();
 
+const PROJECT_BASE = "/tmp/kodu-projects";
+
 // GET /projects
 router.get("/projects", async (req, res): Promise<void> => {
-  const projects = await db.select().from(projectsTable).orderBy(projectsTable.updatedAt);
+  const userId = (req.session as any)?.passport?.user?.id ?? null;
+  // If logged in, show only own projects; otherwise show all (dev/demo mode)
+  const projects = userId
+    ? await db.select().from(projectsTable)
+        .where(eq(projectsTable.userId, userId))
+        .orderBy(projectsTable.updatedAt)
+    : await db.select().from(projectsTable).orderBy(projectsTable.updatedAt);
 
   const projectIds = projects.map((p) => p.id);
 
@@ -62,10 +71,23 @@ router.post("/projects", async (req, res): Promise<void> => {
     return;
   }
 
+  const userId = (req.session as any)?.passport?.user?.id ?? null;
+  const templateId = (req.body.template ?? "blank") as TemplateId;
+
   const [project] = await db
     .insert(projectsTable)
-    .values({ name: parsed.data.name, description: parsed.data.description })
+    .values({ name: parsed.data.name, description: parsed.data.description, userId })
     .returning();
+
+  // Write template files to temp dir
+  const templateFiles = TEMPLATES[templateId] ?? TEMPLATES.blank;
+  const projectDir = path.join(PROJECT_BASE, project.id);
+  await fs.mkdir(projectDir, { recursive: true });
+  for (const file of templateFiles) {
+    const dest = path.join(projectDir, file.path);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, file.content, "utf8");
+  }
 
   res.status(201).json(CreateProjectResponse.parse({ ...project, messageCount: 0, taskCount: 0 }));
 });
