@@ -9,6 +9,7 @@ import Dashboard from '@/pages/dashboard';
 import ProjectWorkspace from '@/pages/project-workspace';
 import LoginPage from '@/pages/login';
 import PricingPage from '@/pages/pricing';
+import AdminPage from '@/pages/admin';
 
 import {
   Route,
@@ -28,6 +29,7 @@ function Router() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/projects/:id" component={ProjectWorkspace} />
         <Route path="/pricing" component={PricingPage} />
+        <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

@@ -22,7 +22,7 @@ import {
   PlusIcon, TerminalSquareIcon, CheckCircle2Icon, ArchiveIcon,
   MessageSquareIcon, LayoutListIcon, Loader2Icon, FolderIcon,
   ZapIcon, SettingsIcon, SearchIcon, GridIcon, ListIcon,
-  ChevronRightIcon, ClockIcon, TrendingUpIcon, LogOutIcon,
+  ChevronRightIcon, ClockIcon, TrendingUpIcon, LogOutIcon, ShieldIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -547,8 +547,18 @@ function UserSection() {
 
   const initials = user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
 
+  const isAdmin = user.email === "gomedia.9999@gmail.com";
+
   return (
-    <div className="p-3 border-t border-border/50">
+    <div className="p-3 border-t border-border/50 space-y-1">
+      {isAdmin && (
+        <Link href="/admin">
+          <button className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-mono text-primary hover:bg-primary/10 transition-colors">
+            <ShieldIcon className="w-3.5 h-3.5" />
+            Admin панель
+          </button>
+        </Link>
+      )}
       <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg group">
         {user.avatar ? (
           <img src={user.avatar} alt={user.name} className="w-7 h-7 rounded-full shrink-0 object-cover" />
