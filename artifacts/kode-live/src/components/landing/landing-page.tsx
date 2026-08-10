@@ -45,7 +45,7 @@ function CtaBand() {
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#07070d] text-zinc-200">
+    <div className="landing-font min-h-screen bg-[#07070d] text-zinc-200">
       <SiteNav />
       <main className="pt-16">
         <Hero />

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans:wght@400;500;600;700;800;900&subset=cyrillic&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -115,6 +115,12 @@
   --app-font-mono: 'JetBrains Mono', monospace;
   
   --radius: 0.5rem;
+}
+
+/* ── Landing page: Noto Sans for proper Mongolian Cyrillic (Ө Ү) ── */
+.landing-font,
+.landing-font * {
+  font-family: 'Noto Sans', 'Space Grotesk', system-ui, sans-serif;
 }
 
 /* ── KoDu brand utilities ───────────────────────────────────────── */
