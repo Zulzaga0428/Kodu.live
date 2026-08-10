@@ -1157,6 +1157,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
   const [streamText, setStreamText] = useState("");
   const [toolCalls, setToolCalls] = useState<ToolCallEntry[]>([]);
   const [statusMsg, setStatusMsg] = useState("");
+  const [clarifyMode, setClarifyMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const toolCallIdRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1201,6 +1202,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
     setStreaming(true);
     setStreamText("");
     setToolCalls([]);
+    setClarifyMode(false);
     setStatusMsg("Kodu бодож байна...");
 
     // Encode attached images → strip data URI prefix, keep base64 only
@@ -1250,6 +1252,11 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
           if (!line.startsWith("data: ")) continue;
           try {
             const ev = JSON.parse(line.slice(6));
+
+            if (ev.type === "clarify_mode") {
+              setClarifyMode(true);
+              setStatusMsg("Kodu таны санааг ойлгож байна...");
+            }
 
             if (ev.type === "delta") {
               setStreamText((t) => t + ev.text);
@@ -1353,7 +1360,7 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">Kodu Agent бэлэн</p>
-                <p className="text-[11px] text-muted-foreground/60 mt-1">Монгол эсвэл English-ээр зааварч</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1">Юу хийхийг хэлэхэд Kodu хэд хэдэн асуулт асуугаад build эхлүүлнэ</p>
               </div>
               <div className="grid grid-cols-2 gap-1.5 w-full">
                 {[
@@ -1386,8 +1393,22 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
               {/* Live streaming text */}
               {streamText && (
                 <div className="flex flex-col gap-1 items-start">
-                  <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">Kodu</span>
-                  <div className="max-w-[95%] rounded-lg rounded-bl-sm px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words bg-card border border-border text-foreground">
+                  {clarifyMode ? (
+                    <div className="flex items-center gap-1.5 px-1">
+                      <span className="text-[9px] font-mono text-amber-400/80 uppercase">Kodu</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[9px] font-medium text-amber-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        Тодруулж байна
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">Kodu</span>
+                  )}
+                  <div className={`max-w-[95%] rounded-lg rounded-bl-sm px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words border text-foreground ${
+                    clarifyMode
+                      ? "bg-amber-500/5 border-amber-500/20 font-sans"
+                      : "bg-card border-border font-mono"
+                  }`}>
                     {streamText}
                     <span className="inline-block w-1.5 h-3.5 bg-primary/80 ml-0.5 animate-pulse align-middle" />
                   </div>
@@ -1584,15 +1605,27 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine, onCre
 
 function MessageBubble({ role, content }: { role: string; content: string }) {
   const isUser = role === "user";
+  // Detect clarify messages: assistant messages that contain numbered questions
+  const isClarify = !isUser && /^\s*1[.)]/m.test(content) && content.includes("?");
   return (
     <div className={`flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-      <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-1">
-        {isUser ? "Та" : "Kodu"}
-      </span>
-      <div className={`max-w-[95%] rounded-lg px-3 py-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words ${
+      <div className="flex items-center gap-1.5 px-1">
+        <span className="text-[9px] font-mono text-muted-foreground/60 uppercase">
+          {isUser ? "Та" : "Kodu"}
+        </span>
+        {isClarify && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[9px] font-medium text-amber-400">
+            <span className="w-1 h-1 rounded-full bg-amber-400" />
+            Тодруулалт
+          </span>
+        )}
+      </div>
+      <div className={`max-w-[95%] rounded-lg px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words ${
         isUser
-          ? "bg-primary text-primary-foreground rounded-br-sm"
-          : "bg-card border border-border text-foreground rounded-bl-sm"
+          ? "bg-primary text-primary-foreground rounded-br-sm font-mono"
+          : isClarify
+            ? "bg-amber-500/5 border border-amber-500/20 text-foreground rounded-bl-sm font-sans"
+            : "bg-card border border-border text-foreground rounded-bl-sm font-mono"
       }`}>
         {content}
       </div>

@@ -305,6 +305,27 @@ Progress, ScrollArea, Resizable
 - Never write files over 300 lines — split into components`;
 
 
+// ── Clarify system prompt (first message only) ────────────────────────────────
+
+const CLARIFY_SYSTEM = `You are Kodu Agent — Mongolia's premier AI coding assistant powering kodu.live.
+
+A user just sent their FIRST message. Your ONLY task right now is to ask 3-4 SHORT, targeted clarifying questions so you can build EXACTLY what they want. Do NOT write any code yet.
+
+Choose the most relevant questions from:
+- **Type**: What kind of site/app? (landing page, portfolio, e-commerce, SaaS dashboard, blog, admin panel, etc.)
+- **Style**: Color theme and design feel? (dark/light, specific colors, modern/minimal/corporate/playful)
+- **Content & Sections**: What pages or sections are needed? What content goes in?
+- **Audience**: Who is it for? (personal, startup, business, specific industry)
+- **Reference**: Any sites they like the design of? (optional)
+
+Rules:
+- Ask only 3-4 questions — pick what's most unclear from their message
+- If something is already obvious from their description, skip that question
+- Keep each question SHORT and SPECIFIC (one line max)
+- Format as a numbered list
+- End with: "Хариулсны дараа хийж эхэлнэ! 🚀" (or English equivalent if they wrote English)
+- Reply in the SAME language the user wrote in`;
+
 // ── POST /api/projects/:id/chat ───────────────────────────────────────────────
 
 router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void> => {
@@ -329,6 +350,9 @@ router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void
     .orderBy(asc(messagesTable.createdAt))
     .limit(39);
 
+  // ── Is this the very first message? ──────────────────────────────────────
+  const isFirstMessage = history.length === 0;
+
   // Save text-only version to DB
   await db.insert(messagesTable).values({
     projectId: id, role: "user", content: content.trim(),
@@ -341,6 +365,36 @@ router.post("/projects/:id/chat", requireCredits, async (req, res): Promise<void
   res.flushHeaders();
 
   const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  // ── CLARIFY MODE — first message: ask questions, don't build ─────────────
+  if (isFirstMessage) {
+    send({ type: "clarify_mode" });
+    let clarifyText = "";
+    try {
+      const clarifyResponse = await anthropic.messages.create({
+        model: model ?? "claude-sonnet-4-5",
+        max_tokens: 512,
+        system: CLARIFY_SYSTEM,
+        messages: [{ role: "user", content: content.trim() }],
+      });
+      for (const block of clarifyResponse.content) {
+        if (block.type === "text" && block.text) {
+          clarifyText += block.text;
+          send({ type: "delta", text: block.text });
+        }
+      }
+      if (clarifyText) {
+        await db.insert(messagesTable).values({
+          projectId: id, role: "assistant", content: clarifyText,
+        });
+      }
+    } catch (err: any) {
+      send({ type: "error", message: err.message ?? "Claude алдаа гарлаа" });
+    }
+    send({ type: "done" });
+    res.end();
+    return;
+  }
 
   const messages: Anthropic.MessageParam[] = history.map((m) => ({
     role: m.role as "user" | "assistant",
