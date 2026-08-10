@@ -525,49 +525,168 @@ type ToolCallEntry = {
   done: boolean;
 };
 
-const TOOL_LABEL: Record<string, string> = {
-  list_files: "📂 Файлуудыг жагсаана",
-  read_file: "📖 Файл уншиж байна",
-  write_file: "✏️ Файл бичиж байна",
-  delete_file: "🗑️ Файл устгаж байна",
-  run_command: "⚡ Команд ажиллуулж байна",
+// ── Tool metadata ─────────────────────────────────────────────────────────────
+
+const TOOL_META: Record<string, { label: string; icon: React.ReactNode }> = {
+  list_files: {
+    label: "Файлуудыг жагсааж байна",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="1.5">
+        <rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 5h6M5 8h6M5 11h4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  read_file: {
+    label: "Файл уншиж байна",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="1.5">
+        <path d="M4 2h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" strokeLinejoin="round" /><path d="M10 2v3h3M5 8h6M5 11h4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  write_file: {
+    label: "Файл бичиж байна",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="1.5">
+        <path d="M10.5 2.5l3 3-7 7H3.5v-3l7-7z" strokeLinejoin="round" /><path d="M8.5 4.5l3 3" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  delete_file: {
+    label: "Файл устгаж байна",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 4h10M6 4V3h4v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  run_command: {
+    label: "Команд ажиллуулж байна",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5" stroke="currentColor" strokeWidth="1.5">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M4 6l3 2.5L4 11M8.5 11h3.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 };
 
-function ToolCard({ entry }: { entry: ToolCallEntry }) {
-  const [open, setOpen] = useState(false);
-  const label = TOOL_LABEL[entry.tool] ?? `🔧 ${entry.tool}`;
-  const subtitle =
-    entry.tool === "write_file" || entry.tool === "read_file" || entry.tool === "delete_file"
-      ? entry.input?.path
-      : entry.tool === "run_command"
-      ? entry.input?.command
-      : entry.input?.path ?? "";
+function toolSubtitle(entry: ToolCallEntry): string {
+  if (entry.tool === "run_command") return entry.input?.command ?? "";
+  return entry.input?.path ?? "";
+}
+
+// ── Single expanded row ───────────────────────────────────────────────────────
+
+function ToolRow({ entry }: { entry: ToolCallEntry }) {
+  const [rowOpen, setRowOpen] = useState(false);
+  const meta = TOOL_META[entry.tool];
+  const sub = toolSubtitle(entry);
 
   return (
-    <div className={`rounded-md border text-[11px] font-mono overflow-hidden transition-colors ${
-      entry.isError ? "border-red-500/30 bg-red-950/20" : entry.done ? "border-border bg-card/30" : "border-primary/30 bg-primary/5"
-    }`}>
+    <div className="border-b border-border/30 last:border-0">
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left"
+        onClick={() => entry.done && entry.result && setRowOpen((o) => !o)}
+        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-accent/5 transition-colors"
       >
-        {!entry.done ? (
-          <Loader2Icon className="w-3 h-3 text-primary animate-spin shrink-0" />
-        ) : entry.isError ? (
-          <XIcon className="w-3 h-3 text-red-400 shrink-0" />
-        ) : (
-          <CheckIcon className="w-3 h-3 text-green-400 shrink-0" />
-        )}
-        <span className="flex-1 text-foreground truncate">{label}</span>
-        {subtitle && <span className="text-muted-foreground/60 truncate max-w-[100px]">{subtitle}</span>}
-        {entry.done && (
-          open ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
-               : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+        <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
+          !entry.done ? "text-primary" : entry.isError ? "text-red-400" : "text-muted-foreground"
+        }`}>
+          {!entry.done
+            ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
+            : meta?.icon ?? <WrenchIcon className="w-3.5 h-3.5" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-[11px] font-mono text-foreground/80">{meta?.label ?? entry.tool}</span>
+          {sub && (
+            <span className="ml-2 text-[10px] font-mono text-muted-foreground/50 truncate">
+              {sub.length > 30 ? "…" + sub.slice(-28) : sub}
+            </span>
+          )}
+        </div>
+        {entry.done && entry.result && (
+          rowOpen
+            ? <ChevronDownIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+            : <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />
         )}
       </button>
-      {open && entry.result && (
-        <div className="px-2.5 pb-2 text-[10px] text-muted-foreground whitespace-pre-wrap border-t border-border/50 pt-1.5 max-h-32 overflow-auto">
+      {rowOpen && entry.result && (
+        <div className="px-10 pb-2.5 text-[10px] font-mono text-muted-foreground/70 whitespace-pre-wrap max-h-28 overflow-auto leading-relaxed">
           {entry.result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Action Group (Replit-style collapsed/expanded) ────────────────────────────
+
+function ToolActionGroup({ entries, isStreaming }: { entries: ToolCallEntry[]; isStreaming: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const doneCount = entries.filter((e) => e.done).length;
+  const total = entries.length;
+  const allDone = doneCount === total && !isStreaming;
+  const hasError = entries.some((e) => e.isError);
+
+  return (
+    <div className="flex flex-col">
+      {/* Collapsed pill row */}
+      {!expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex items-center gap-1.5 group w-fit"
+        >
+          {/* Icon boxes */}
+          <div className="flex items-center gap-1">
+            {entries.map((e) => {
+              const meta = TOOL_META[e.tool];
+              return (
+                <div
+                  key={e.id}
+                  className={`w-6 h-6 rounded-md border flex items-center justify-center transition-colors ${
+                    !e.done
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : e.isError
+                      ? "border-red-500/40 bg-red-950/30 text-red-400"
+                      : "border-border bg-card/60 text-muted-foreground"
+                  }`}
+                >
+                  {!e.done ? (
+                    <Loader2Icon className="w-3 h-3 animate-spin" />
+                  ) : (
+                    meta?.icon ?? <WrenchIcon className="w-3 h-3" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* "N actions" badge */}
+          <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border transition-colors ${
+            hasError
+              ? "border-red-500/30 text-red-400 bg-red-950/20"
+              : allDone
+              ? "border-border text-muted-foreground bg-card/40 group-hover:border-primary/30 group-hover:text-foreground"
+              : "border-primary/40 text-primary bg-primary/10 animate-pulse"
+          }`}>
+            {allDone ? `${total} action${total !== 1 ? "s" : ""}` : `${doneCount}/${total} хийж байна...`}
+          </span>
+        </button>
+      )}
+
+      {/* Expanded list */}
+      {expanded && (
+        <div className="flex flex-col rounded-lg border border-border overflow-hidden">
+          {/* Header */}
+          <button
+            onClick={() => setExpanded(false)}
+            className="flex items-center gap-2 px-3 py-2 text-[11px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-colors text-left border-b border-border/50"
+          >
+            <ChevronDownIcon className="w-3 h-3" />
+            Хаах
+          </button>
+
+          {/* Rows */}
+          {entries.map((e) => <ToolRow key={e.id} entry={e} />)}
         </div>
       )}
     </div>
@@ -748,12 +867,9 @@ function ChatPanel({ projectId, onFileChanged, onFileTree, onTerminalLine }: Cha
                 <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
               ))}
 
-              {/* Live tool calls */}
+              {/* Live tool calls — Replit-style action group */}
               {toolCalls.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[9px] font-mono text-muted-foreground/60 uppercase px-0.5">Kodu хийж байна</span>
-                  {toolCalls.map((tc) => <ToolCard key={tc.id} entry={tc} />)}
-                </div>
+                <ToolActionGroup entries={toolCalls} isStreaming={streaming} />
               )}
 
               {/* Live streaming text */}
