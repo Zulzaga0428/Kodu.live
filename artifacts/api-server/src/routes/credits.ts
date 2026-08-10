@@ -8,7 +8,7 @@ const router: IRouter = Router();
 export const MODEL_COST: Record<string, number> = {
   "claude-haiku-4-5": 4,   // ⚡ Fast
   "claude-sonnet-4-5": 7,  // 🧠 Smart
-  "claude-opus-4-5": 10,   // 🔬 Deep
+  "claude-opus-4-5": 25,   // 🔬 Deep
 };
 
 export function creditCost(model: string): number {

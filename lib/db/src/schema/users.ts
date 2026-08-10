@@ -7,7 +7,7 @@ export const usersTable = pgTable("users", {
   avatar: text("avatar"),
   provider: text("provider").notNull(), // "google" | "github" | "demo"
   providerId: text("provider_id").notNull(),
-  credits: integer("credits").notNull().default(20), // шинэ хэрэглэгч 20 кредит авна
+  credits: integer("credits").notNull().default(50), // шинэ хэрэглэгч 50 кредит авна
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

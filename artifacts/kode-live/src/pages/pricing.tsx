@@ -38,8 +38,8 @@ const PACKAGES = [
 const USAGE = [
   { icon: <ZapIcon className="w-3.5 h-3.5 text-yellow-400" />, label: "Fast үйлдэл", cost: 4, note: "claude-haiku" },
   { icon: <BrainIcon className="w-3.5 h-3.5 text-blue-400" />, label: "Smart үйлдэл", cost: 7, note: "claude-sonnet" },
-  { icon: <MicroscopeIcon className="w-3.5 h-3.5 text-purple-400" />, label: "Deep үйлдэл", cost: 10, note: "claude-opus" },
-  { icon: <StarIcon className="w-3.5 h-3.5 text-green-400" />, label: "Шинэ хэрэглэгч бүрт", cost: 20, note: "үнэгүй эхлэл" },
+  { icon: <MicroscopeIcon className="w-3.5 h-3.5 text-purple-400" />, label: "Deep үйлдэл", cost: 25, note: "claude-opus" },
+  { icon: <StarIcon className="w-3.5 h-3.5 text-green-400" />, label: "Шинэ хэрэглэгч бүрт", cost: 50, note: "үнэгүй эхлэл" },
 ];
 
 export default function PricingPage() {
@@ -93,7 +93,7 @@ export default function PricingPage() {
           </p>
           <h1 className="text-4xl font-bold text-foreground mb-3">Шаардлагаараа кредит нэм</h1>
           <p className="text-sm text-muted-foreground font-mono">
-            Fast generate = 4кр · Smart generate = 7кр · QPay-р төлнө
+            Fast = 4кр · Smart = 7кр · Deep = 25кр · QPay-р төлнө
           </p>
         </div>
 
@@ -163,7 +163,7 @@ export default function PricingPage() {
         <div className="mt-4 text-center">
           <p className="text-[11px] font-mono text-muted-foreground/50 flex items-center justify-center gap-1">
             <CheckIcon className="w-3 h-3 text-green-400" />
-            Шинэ бүртгэл бүр 20 үнэгүй кредит авна
+            Шинэ бүртгэл бүр 50 үнэгүй кредит авна
           </p>
         </div>
       </div>
