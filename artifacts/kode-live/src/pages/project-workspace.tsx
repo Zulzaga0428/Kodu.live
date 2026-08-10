@@ -15,7 +15,7 @@ import {
   FolderIcon, FileTextIcon, ChevronRightIcon, ChevronDownIcon,
   PlayIcon, MonitorIcon, TerminalIcon, CodeIcon, BotIcon, ListTodoIcon,
   FileCodeIcon, RefreshCwIcon, ZapIcon, WrenchIcon, CheckIcon, XIcon,
-  DownloadIcon, FolderPlusIcon, FilePlusIcon,
+  DownloadIcon, FolderPlusIcon, FilePlusIcon, ExternalLinkIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SettingsModal } from "@/components/settings-modal";
@@ -241,6 +241,7 @@ export default function ProjectWorkspace() {
           <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors w-[3px]" />
           <ResizablePanel defaultSize={47} minSize={30} className="flex flex-col">
             <WorkspacePanel
+              projectId={id}
               activeFile={activeFile}
               activeContent={activeContent}
               onContentChange={setActiveContent}
@@ -301,6 +302,7 @@ function AgentPanel({ projectId, project, onFileChanged, onFileTree, onTerminalL
 // ── Workspace Panel (center) ──────────────────────────────────────────────────
 
 type WorkspacePanelProps = {
+  projectId: string;
   activeFile: string | null;
   activeContent: string;
   onContentChange: (c: string) => void;
@@ -342,9 +344,77 @@ function MonacoEditorWithSettings({
   );
 }
 
-function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLines }: WorkspacePanelProps) {
+type PreviewStatus = "idle" | "creating" | "ready" | "error" | "compile_error" | "busy";
+
+interface PreviewState {
+  status: PreviewStatus;
+  previewId?: string;
+  url?: string;
+  error?: string;
+  buildLogs?: string;
+}
+
+function WorkspacePanel({ projectId, activeFile, activeContent, onContentChange, terminalLines }: WorkspacePanelProps) {
   const [tab, setTab] = useState<WorkspaceTab>("code");
   const terminalRef = useRef<HTMLDivElement>(null);
+  const [preview, setPreview] = useState<PreviewState>({ status: "idle" });
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  // ── Create preview ────────────────────────────────────────────────────────
+  const createPreview = async () => {
+    setPreview({ status: "creating" });
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/preview`, { method: "POST" });
+      if (res.status === 503) { setPreview({ status: "busy", error: "Сервер дүүрэн байна. 30 секундын дараа дахин оролдоно уу." }); return; }
+      if (!res.ok) { setPreview({ status: "error", error: `Алдаа: ${res.status}` }); return; }
+      const data = await res.json();
+      if (data.ready === false && data.reason === "compile_error") {
+        setPreview({ status: "compile_error", previewId: data.previewId, url: data.url, buildLogs: data.logs });
+        return;
+      }
+      if (data.ready === false) {
+        setPreview({ status: "error", error: "Preview ачааллахад хэтэрхий удлаа. Дахин оролдоно уу." });
+        return;
+      }
+      setPreview({ status: "ready", previewId: data.previewId, url: data.url });
+      startHeartbeat(data.previewId);
+    } catch (e: any) {
+      setPreview({ status: "error", error: e.message ?? "Холболтын алдаа" });
+    }
+  };
+
+  // ── Heartbeat ─────────────────────────────────────────────────────────────
+  const startHeartbeat = (pid: string) => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    const beat = async () => {
+      if (document.visibilityState !== "visible") return;
+      const res = await fetch(`${BASE}/api/projects/${projectId}/preview/keepalive`, { method: "POST" });
+      if (res.status === 404) {
+        setPreview({ status: "idle" });
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      }
+    };
+    beat();
+    heartbeatRef.current = setInterval(beat, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", beat);
+  };
+
+  // ── Stop preview on unmount ───────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (preview.previewId) {
+        fetch(`${BASE}/api/projects/${projectId}/preview`, { method: "DELETE" }).catch(() => {});
+      }
+    };
+  }, [preview.previewId]);
+
+  // ── Auto-create when switching to preview tab ─────────────────────────────
+  const handleTabChange = (t: WorkspaceTab) => {
+    setTab(t);
+    if (t === "preview" && preview.status === "idle") createPreview();
+  };
 
   useEffect(() => {
     if (tab === "terminal" && terminalRef.current) {
@@ -355,9 +425,9 @@ function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLi
   return (
     <div className="flex flex-col h-full bg-background">
       <div className="flex items-center border-b border-border shrink-0 bg-card/40">
-        <TabBtn active={tab === "code"} onClick={() => setTab("code")} icon={<CodeIcon className="w-3 h-3" />} label="Код" />
-        <TabBtn active={tab === "preview"} onClick={() => setTab("preview")} icon={<MonitorIcon className="w-3 h-3" />} label="Preview" />
-        <TabBtn active={tab === "terminal"} onClick={() => setTab("terminal")} icon={<TerminalIcon className="w-3 h-3" />} label="Terminal" />
+        <TabBtn active={tab === "code"} onClick={() => handleTabChange("code")} icon={<CodeIcon className="w-3 h-3" />} label="Код" />
+        <TabBtn active={tab === "preview"} onClick={() => handleTabChange("preview")} icon={<MonitorIcon className="w-3 h-3" />} label="Preview" />
+        <TabBtn active={tab === "terminal"} onClick={() => handleTabChange("terminal")} icon={<TerminalIcon className="w-3 h-3" />} label="Terminal" />
         {activeFile && (
           <div className="ml-auto flex items-center pr-3 gap-1.5">
             <span className={`text-[10px] font-mono ${extColor(activeFile)}`}>
@@ -391,20 +461,129 @@ function WorkspacePanel({ activeFile, activeContent, onContentChange, terminalLi
         )}
 
         {tab === "preview" && (
-          <div className="h-full flex flex-col items-center justify-center bg-[#0a0a0a] gap-4">
-            <div className="w-full max-w-sm rounded-xl border border-border overflow-hidden shadow-2xl">
-              <div className="bg-card h-8 flex items-center gap-1.5 px-3 border-b border-border">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-                <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
-                <span className="flex-1 text-center text-[10px] font-mono text-muted-foreground">localhost:3000</span>
+          <div className="h-full flex flex-col bg-[#0a0a0a]">
+            {/* Browser chrome bar */}
+            <div className="flex items-center gap-1.5 px-3 h-9 bg-zinc-900 border-b border-zinc-800 shrink-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+              <div className="flex-1 mx-2 flex items-center bg-zinc-800 rounded-md px-3 h-5">
+                <span className="text-[10px] font-mono text-zinc-400 truncate">
+                  {preview.url ?? "kodu sandbox"}
+                </span>
               </div>
-              <div className="h-64 bg-[#111] flex flex-col items-center justify-center text-center p-6">
-                <h2 className="text-lg font-bold text-white mb-2">Kodu Agent Preview</h2>
-                <p className="text-sm text-gray-400">pnpm run dev дуусгасны дараа харагдана.</p>
-              </div>
+              {/* Refresh / open buttons */}
+              {preview.status === "ready" && (
+                <div className="flex gap-1 ml-1">
+                  <button
+                    onClick={() => { setPreview({ status: "idle" }); setTimeout(createPreview, 50); }}
+                    className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                    title="Шинэчлэх"
+                  >
+                    <RefreshCwIcon className="w-3 h-3" />
+                  </button>
+                  <a
+                    href={preview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                    title="Шинэ цонхонд нээх"
+                  >
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
             </div>
-            <p className="text-xs font-mono text-muted-foreground">Агент "pnpm install && pnpm run dev" ажиллуулбал бэлэн болно</p>
+
+            {/* Preview content */}
+            <div className="flex-1 relative overflow-hidden">
+              {/* LOADING */}
+              {preview.status === "creating" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
+                  <div className="relative w-12 h-12">
+                    <div className="absolute inset-0 rounded-full border-2 border-primary/20" />
+                    <div className="absolute inset-0 rounded-full border-t-2 border-primary animate-spin" />
+                  </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium text-zinc-200">Preview ачаалж байна...</p>
+                    <p className="text-xs text-zinc-500">Container бэлтгэж байна. 5–30 секунд хүлээнэ үү.</p>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="w-48 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="h-full bg-primary rounded-full animate-[progress_20s_ease-in-out_forwards]" style={{ width: "100%" }} />
+                  </div>
+                </div>
+              )}
+
+              {/* READY — iframe */}
+              {preview.status === "ready" && preview.url && (
+                <iframe
+                  src={preview.url}
+                  className="w-full h-full border-0"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  title="Live Preview"
+                />
+              )}
+
+              {/* COMPILE ERROR */}
+              {preview.status === "compile_error" && (
+                <div className="absolute inset-0 flex flex-col bg-zinc-950 p-4 gap-3 overflow-auto">
+                  <div className="flex items-center gap-2 text-red-400">
+                    <span className="text-sm font-semibold">⚠ Build алдаа</span>
+                  </div>
+                  <pre className="flex-1 text-[11px] font-mono text-red-300 bg-zinc-900 rounded-lg p-3 overflow-auto whitespace-pre-wrap">
+                    {preview.buildLogs}
+                  </pre>
+                  <p className="text-xs text-zinc-500">Агентад "build алдааг засаарай" гэж хэлнэ үү.</p>
+                </div>
+              )}
+
+              {/* BUSY */}
+              {preview.status === "busy" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950">
+                  <span className="text-2xl">⏳</span>
+                  <p className="text-sm text-zinc-300">{preview.error}</p>
+                  <button
+                    onClick={createPreview}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition"
+                  >
+                    Дахин оролдох
+                  </button>
+                </div>
+              )}
+
+              {/* GENERIC ERROR */}
+              {preview.status === "error" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950">
+                  <span className="text-2xl">❌</span>
+                  <p className="text-sm text-zinc-300">{preview.error}</p>
+                  <button
+                    onClick={createPreview}
+                    className="px-4 py-2 rounded-lg bg-zinc-800 text-white text-sm font-medium hover:bg-zinc-700 transition"
+                  >
+                    Дахин оролдох
+                  </button>
+                </div>
+              )}
+
+              {/* IDLE */}
+              {preview.status === "idle" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
+                  <MonitorIcon className="w-10 h-10 text-zinc-700" />
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium text-zinc-300">Live Preview</p>
+                    <p className="text-xs text-zinc-600">Төслийн кодыг бодит хэлбэрт харуулна.</p>
+                  </div>
+                  <button
+                    onClick={createPreview}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition flex items-center gap-2"
+                  >
+                    <PlayIcon className="w-3.5 h-3.5" />
+                    Preview эхлүүлэх
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
